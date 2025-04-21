@@ -1,21 +1,21 @@
 # app/core/config.py
-from pydantic import BaseSettings
+from dotenv import load_dotenv
+import os
 
-class Settings(BaseSettings):
-    port: int
-    database_path: str
-    database_name: str
-    jwt_secret_key: str
-    jwt_access_token_expires: int
-    mail_server: str
-    mail_port: int
-    mail_use_tls: bool
-    mail_username: str
-    mail_password: str
-    mail_from: str
-    gemini_api_key: str
+load_dotenv()
 
-    class Config:
-        env_file = ".env"
+class Settings:
+    PORT = os.getenv("PORT")
+    DATABASE_PATH = os.getenv("DATABASE_PATH")
+    DATABASE_NAME = os.getenv("DATABASE_NAME")
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+    JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES"))
+    MAIL_SERVER = os.getenv("MAIL_SERVER")
+    MAIL_PORT = int(os.getenv("MAIL_PORT"))
+    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS") == "True"
+    MAIL_USERNAME = os.getenv("MAIL_USERNAME")
+    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+    MAIL_FROM = os.getenv("MAIL_FROM")
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 settings = Settings()
