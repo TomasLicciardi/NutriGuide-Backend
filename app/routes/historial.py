@@ -1,10 +1,10 @@
-# app/routes/historial.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.models import models
 from app.database.connection import get_db
 from app.utils.jwt_bearer import JWTBearer
 from app.utils.jwt_decoder import extract_user_id
+import json
 
 router = APIRouter(
     prefix="/historial",
@@ -22,13 +22,14 @@ def obtener_historial(token: str = Depends(JWTBearer()), db: Session = Depends(g
         raise HTTPException(status_code=404, detail="Historial no encontrado")
 
     productos = db.query(models.ProductoAnalizado).filter_by(historial_id=historial.id).all()
+
     return {
         "historial_id": historial.id,
         "usuario_id": historial.usuario_id,
         "productos_analizados": [
             {
                 "id": p.id,
-                "resultado": p.resultado_json,
+                "resultado": json.loads(p.resultado_json),  # 👈 aquí se convierte el string a dict
                 "fecha": p.fecha
             } for p in productos
         ]
@@ -49,6 +50,6 @@ def obtener_producto(id: int, token: str = Depends(JWTBearer()), db: Session = D
 
     return {
         "id": producto.id,
-        "resultado": producto.resultado,
+        "resultado": json.loads(producto.resultado_json),  # 👈 también aquí
         "fecha": producto.fecha
     }
