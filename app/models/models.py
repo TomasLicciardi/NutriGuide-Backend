@@ -4,6 +4,8 @@ from sqlalchemy.orm import relationship
 from app.database.connection import Base
 from datetime import datetime
 from sqlalchemy import DateTime
+import json
+
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -12,8 +14,15 @@ class Usuario(Base):
     usuario = Column(String, nullable=False)
     mail = Column(String, unique=True, nullable=False)
     contrasena = Column(String, nullable=False)
+    restricciones = Column(Text, nullable=True)  
 
     historial = relationship("Historial", back_populates="usuario", uselist=False)
+
+    def get_restricciones(self):
+        return json.loads(self.restricciones) if self.restricciones else []
+
+    def set_restricciones(self, restricciones_list):
+        self.restricciones = json.dumps(restricciones_list)
 
 class Historial(Base):
     __tablename__ = "historiales"

@@ -5,6 +5,8 @@ from app.models.models import Usuario
 from app.utils.security import hash_password, verify_password
 from app.utils.jwt_tools import create_access_token
 from pydantic import BaseModel, EmailStr
+from typing import Optional, List
+import json
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -13,6 +15,7 @@ class UsuarioRegistro(BaseModel):
     usuario: str
     mail: EmailStr
     contrasena: str
+    restricciones: Optional[List[str]] = None
 
 class UsuarioLogin(BaseModel):
     mail: EmailStr
@@ -28,14 +31,18 @@ def register(data: UsuarioRegistro, db: Session = Depends(get_db)):
     nuevo_usuario = Usuario(
         usuario=data.usuario,
         mail=data.mail,
-        contrasena=hash_password(data.contrasena)
+        contrasena=hash_password(data.contrasena),
+        restricciones=json.dumps(data.restricciones) if data.restricciones else None
     )
     db.add(nuevo_usuario)
     db.commit()
     db.refresh(nuevo_usuario)
 
-    return {"mensaje": "Usuario registrado correctamente", "usuario": nuevo_usuario.usuario}
-
+    return {
+        "mensaje": "Usuario registrado correctamente",
+        "usuario": nuevo_usuario.usuario,
+        "restricciones": data.restricciones or []
+    }
 # --- Login ---
 @router.post("/login")
 def login(data: UsuarioLogin, db: Session = Depends(get_db)):
