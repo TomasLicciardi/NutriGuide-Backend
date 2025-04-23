@@ -14,8 +14,6 @@ def init_database():
     # Verifica si ya hay tablas
     inspector = inspect(engine)
     if not inspector.get_table_names():
-        print("🔧 Creando tablas en la base de datos...")
         Base.metadata.create_all(bind=engine)
         print("✅ Tablas creadas.")
-    else:
-        print("📦 Las tablas ya existen. No se necesita crear nada.")
+    

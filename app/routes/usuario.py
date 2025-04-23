@@ -10,6 +10,16 @@ import json
 
 router = APIRouter(prefix="/usuario", tags=["usuario"])
 
+@router.get("/restricciones")
+def obtener_restricciones(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
+    usuario_id = extract_user_id(token)
+    usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    restricciones = json.loads(usuario.restricciones) if usuario.restricciones else []
+    return {"restricciones": restricciones}
+
 class RestriccionesUpdate(BaseModel):
     restricciones: List[str]
 
