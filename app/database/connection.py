@@ -1,26 +1,47 @@
-from sqlalchemy import create_engine
+import os
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
-# URL de conexión a la base de datos
+# Construir la URL de conexión
 DATABASE_URL = f"sqlite:///{settings.DATABASE_PATH}/{settings.DATABASE_NAME}"
 
-# Crear el motor de la base de datos
+# Crear el motor SQLAlchemy
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
-# Crear la sesión para interactuar con la base de datos
+# Crear la sesión de base de datos
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Base para la definición de modelos
+# Declarative base para los modelos
 Base = declarative_base()
 
 def get_db():
     """
-    Esta función devuelve una sesión de la base de datos.
-    Es usada en FastAPI para inyectar la sesión en los endpoints.
+    Devuelve una sesión activa de la base de datos.
+    Utilizado como dependencia en los endpoints.
     """
     db = SessionLocal()
     try:
-        yield db  # Devuelve la sesión activa para usarla en el endpoint
+        yield db
     finally:
-        db.close()  # Asegura que la sesión se cierre cuando ya no se necesite
+        db.close()
+
+def init_database():
+    """
+    Inicializa la base de datos:
+    - Crea el archivo SQLite si no existe.
+    - Crea las tablas si no existen aún.
+    """
+    db_path = os.path.join(settings.DATABASE_PATH, settings.DATABASE_NAME)
+
+    # Crear archivo si no existe
+    if not os.path.exists(db_path):
+        open(db_path, 'a').close()
+
+    # Importar modelos para que SQLAlchemy los registre
+    from app.models import user, history, product
+
+    # Crear tablas si no existen
+    inspector = inspect(engine)
+    if not inspector.get_table_names():
+        Base.metadata.create_all(bind=engine)

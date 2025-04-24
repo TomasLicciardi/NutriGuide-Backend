@@ -5,9 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.services.gemini_service import analizar_imagen
 from app.database.connection import get_db
-from app.models.models import Historial, ProductoAnalizado, Usuario
-from app.utils.jwt_bearer import JWTBearer
-from app.utils.jwt_decoder import extract_user_id
+from app.models import History, Product, User
+from app.utils.jwt import *
 import json
 
 router = APIRouter(prefix="/analisis", tags=["analisis"])
@@ -21,22 +20,22 @@ async def analizar_producto(
     usuario_id = extract_user_id(token)
 
     # Verificar o crear historial del usuario
-    historial = db.query(Historial).filter_by(usuario_id=usuario_id).first()
+    historial = db.query(History).filter_by(usuario_id=usuario_id).first()
     if not historial:
-        historial = Historial(usuario_id=usuario_id)
+        historial = History(usuario_id=usuario_id)
         db.add(historial)
         db.commit()
         db.refresh(historial)
 
     # Obtener restricciones del usuario
-    usuario = db.query(Usuario).filter_by(id=usuario_id).first()
+    usuario = db.query(User).filter_by(id=usuario_id).first()
     restricciones = json.loads(usuario.restricciones) if usuario and usuario.restricciones else []
 
     # Analizar imagen con restricciones personalizadas
     resultado = await analizar_imagen(file, restricciones=restricciones)
 
     # Guardar el resultado
-    nuevo_producto = ProductoAnalizado(
+    nuevo_producto = Product(
         historial_id=historial.id,
         resultado_json=json.dumps(resultado)
     )

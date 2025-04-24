@@ -1,60 +1,47 @@
-from fastapi import APIRouter, HTTPException, Depends
+# app/routes/auth.py
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.database.connection import get_db
-from app.models.models import Usuario
-from app.utils.security import hash_password, verify_password
-from app.utils.jwt_tools import create_access_token
+from app.models.user import User  
+from app.utils.security import hash_password
+from app.utils.jwt import create_access_token
+from app.utils.mail import send_email   
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
-import json
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# --- Esquemas de entrada ---
-class UsuarioRegistro(BaseModel):
-    usuario: str
-    mail: EmailStr
-    contrasena: str
-    restricciones: Optional[List[str]] = None
+class UserCreate(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+    restrictions: Optional[List[str]] = None
 
-class UsuarioLogin(BaseModel):
-    mail: EmailStr
-    contrasena: str
-
-# --- Registro de usuario ---
 @router.post("/register")
-def register(data: UsuarioRegistro, db: Session = Depends(get_db)):
-    existe = db.query(Usuario).filter(Usuario.mail == data.mail).first()
-    if existe:
-        raise HTTPException(status_code=409, detail="El mail ya está registrado.")
+async def register(
+    data: UserCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    if db.query(User).filter_by(email=data.email).first():
+        raise HTTPException(409, "El email ya existe")
 
-    nuevo_usuario = Usuario(
-        usuario=data.usuario,
-        mail=data.mail,
-        contrasena=hash_password(data.contrasena),
-        restricciones=json.dumps(data.restricciones) if data.restricciones else None
+    user = User(
+        username=data.username,
+        email=data.email,
+        password=hash_password(data.password),
+        restrictions=data.restrictions or []
     )
-    db.add(nuevo_usuario)
+    db.add(user)
     db.commit()
-    db.refresh(nuevo_usuario)
+    db.refresh(user)
 
-    return {
-        "mensaje": "Usuario registrado correctamente",
-        "usuario": nuevo_usuario.usuario,
-        "restricciones": data.restricciones or []
-    }
-# --- Login ---
-@router.post("/login")
-def login(data: UsuarioLogin, db: Session = Depends(get_db)):
-    usuario = db.query(Usuario).filter(Usuario.mail == data.mail).first()
-    if not usuario or not verify_password(data.contrasena, usuario.contrasena):
-        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    # Enviar mail en background
+    background_tasks.add_task(
+        send_email,
+        subject="¡Bienvenido a NutriGuide!",
+        recipients=[user.email],
+        body=f"Hola {user.username},\n\nGracias por registrarte en NutriGuide 😊\n\n¡Disfruta!"
+    )
 
-    token = create_access_token(data={"sub": str(usuario.id)})
-
-    return {
-        "id": usuario.id,
-        "usuario": usuario.usuario,
-        "mail": usuario.mail,
-        "access_token": token
-    }
+    return {"message": "Usuario registrado. Email de bienvenida enviado."}

@@ -1,18 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, analyze, historial, usuario
-from app.core.init_db import init_database  
+
+from app.routes import auth, analyze, history, user
+from app.database.connection import init_database
 
 app = FastAPI(
     title="NutriGuide API",
-    description="API para análisis de etiquetas alimenticias con Gemini y autenticación JWT.",
+    description="API for food label analysis with Gemini and JWT authentication.",
     version="1.0.0"
 )
 
-# Iniciar la base de datos si es necesario
+# Initialize the database if needed
 init_database()
 
-# Middleware CORS
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,8 +22,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Incluir routers
+# Include routers
 app.include_router(auth.router)
 app.include_router(analyze.router)
-app.include_router(historial.router)
-app.include_router(usuario.router)
+app.include_router(history.router)
+app.include_router(user.router)
