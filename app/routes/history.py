@@ -6,8 +6,8 @@ from app.utils.jwt import *
 import json
 
 router = APIRouter(
-    prefix="/historial",
-    tags=["Historial"],
+    prefix="/history",  # Cambio a "history" en inglés
+    tags=["History"],
     dependencies=[Depends(JWTBearer())]
 )
 
@@ -16,20 +16,20 @@ router = APIRouter(
 def obtener_historial(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
     usuario_id = extract_user_id(token)
 
-    historial = db.query(models.Historial).filter_by(usuario_id=usuario_id).first()
+    historial = db.query(History).filter_by(user_id=usuario_id).first()  # Cambio a "user_id"
     if not historial:
         raise HTTPException(status_code=404, detail="Historial no encontrado")
 
-    productos = db.query(models.ProductoAnalizado).filter_by(historial_id=historial.id).all()
+    productos = db.query(Product).filter_by(history_id=historial.id).all()  # Cambio a "history_id"
 
     return {
         "historial_id": historial.id,
-        "usuario_id": historial.usuario_id,
+        "usuario_id": historial.user_id,  # Cambio a "user_id"
         "productos_analizados": [
             {
                 "id": p.id,
-                "resultado": json.loads(p.resultado_json),  # 👈 aquí se convierte el string a dict
-                "fecha": p.fecha
+                "resultado": json.loads(p.result_json),  # Cambio a "result_json"
+                "fecha": p.date  # Cambio a "date"
             } for p in productos
         ]
     }
@@ -39,9 +39,9 @@ def obtener_historial(token: str = Depends(JWTBearer()), db: Session = Depends(g
 def obtener_producto(id: int, token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
     usuario_id = extract_user_id(token)
 
-    producto = db.query(models.ProductoAnalizado).join(models.Historial).filter(
-        models.ProductoAnalizado.id == id,
-        models.Historial.usuario_id == usuario_id
+    producto = db.query(Product).join(History).filter(
+        Product.id == id,
+        History.user_id == usuario_id  # Cambio a "user_id"
     ).first()
 
     if not producto:
@@ -49,6 +49,6 @@ def obtener_producto(id: int, token: str = Depends(JWTBearer()), db: Session = D
 
     return {
         "id": producto.id,
-        "resultado": json.loads(producto.resultado_json),  # 👈 también aquí
-        "fecha": producto.fecha
+        "resultado": json.loads(producto.result_json),  # Cambio a "result_json"
+        "fecha": producto.date  # Cambio a "date"
     }

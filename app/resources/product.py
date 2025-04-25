@@ -1,3 +1,4 @@
+#app/resurces/product.py
 from sqlalchemy.orm import Session
 from app.models.product import Product
 from datetime import datetime
