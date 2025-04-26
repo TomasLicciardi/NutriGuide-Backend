@@ -11,25 +11,26 @@ router = APIRouter(
     dependencies=[Depends(JWTBearer())]
 )
 
-# Obtener historial completo del usuario
+# Obtener historial completo del usuario, ordenado por fecha (más reciente primero)
 @router.get("/")
 def obtener_historial(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
     usuario_id = extract_user_id(token)
 
-    historial = db.query(History).filter_by(user_id=usuario_id).first()  # Cambio a "user_id"
+    historial = db.query(History).filter_by(user_id=usuario_id).first()
     if not historial:
         raise HTTPException(status_code=404, detail="Historial no encontrado")
 
-    productos = db.query(Product).filter_by(history_id=historial.id).all()  # Cambio a "history_id"
+    # Obtener productos ordenados por fecha (más reciente primero)
+    productos = db.query(Product).filter_by(history_id=historial.id).order_by(Product.date.desc()).all()
 
     return {
         "historial_id": historial.id,
-        "usuario_id": historial.user_id,  # Cambio a "user_id"
+        "usuario_id": historial.user_id,
         "productos_analizados": [
             {
                 "id": p.id,
-                "resultado": json.loads(p.result_json),  # Cambio a "result_json"
-                "fecha": p.date  # Cambio a "date"
+                "resultado": json.loads(p.result_json),
+                "fecha": p.date
             } for p in productos
         ]
     }
@@ -41,7 +42,7 @@ def obtener_producto(id: int, token: str = Depends(JWTBearer()), db: Session = D
 
     producto = db.query(Product).join(History).filter(
         Product.id == id,
-        History.user_id == usuario_id  # Cambio a "user_id"
+        History.user_id == usuario_id
     ).first()
 
     if not producto:
@@ -49,6 +50,46 @@ def obtener_producto(id: int, token: str = Depends(JWTBearer()), db: Session = D
 
     return {
         "id": producto.id,
-        "resultado": json.loads(producto.result_json),  # Cambio a "result_json"
-        "fecha": producto.date  # Cambio a "date"
+        "resultado": json.loads(producto.result_json),
+        "fecha": producto.date
     }
+
+# Eliminar un producto específico del historial
+@router.delete("/product/{id}")
+async def eliminar_producto(id: int, token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
+    usuario_id = extract_user_id(token)
+
+    # Buscar el producto específico con su historial
+    producto = db.query(Product).join(History).filter(
+        Product.id == id,
+        History.user_id == usuario_id
+    ).first()
+
+    if not producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    # Eliminar el producto de la base de datos
+    db.delete(producto)
+    db.commit()
+
+    return {"mensaje": "Producto eliminado exitosamente"}
+
+# Eliminar el historial completo de un usuario
+@router.delete("/")
+async def eliminar_historial(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
+    usuario_id = extract_user_id(token)
+
+    # Buscar el historial del usuario
+    historial = db.query(History).filter_by(user_id=usuario_id).first()
+
+    if not historial:
+        raise HTTPException(status_code=404, detail="Historial no encontrado")
+
+    # Eliminar todos los productos asociados al historial
+    db.query(Product).filter_by(history_id=historial.id).delete()
+
+    # Eliminar el historial
+    db.delete(historial)
+    db.commit()
+
+    return {"mensaje": "Historial y productos asociados eliminados exitosamente"}

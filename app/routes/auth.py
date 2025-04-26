@@ -1,14 +1,16 @@
+# app/routes/auth.py
+
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from app.database.connection import get_db
-from app.models.user import User  
+from app.models.user import User
 from app.utils.security import hash_password
-from app.utils.jwt import create_access_token
+from app.utils.jwt import create_access_token, JWTBearer
 from app.utils.mail import send_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-
+# --- Registro de usuario ---
 @router.post("/register")
 async def registrar_usuario(
     request: Request,
@@ -22,10 +24,10 @@ async def registrar_usuario(
     restricciones = datos.get("restricciones", [])
 
     if not nombre_usuario or not correo or not contrasena:
-        raise HTTPException(400, "Faltan campos obligatorios")
+        raise HTTPException(status_code=400, detail="Faltan campos obligatorios.")
 
     if db.query(User).filter_by(email=correo).first():
-        raise HTTPException(409, "El correo ya está registrado")
+        raise HTTPException(status_code=409, detail="El correo ya está registrado.")
 
     usuario = User(
         username=nombre_usuario,
@@ -45,20 +47,25 @@ async def registrar_usuario(
         body=f"Hola {nombre_usuario},\n\nGracias por registrarte en NutriGuide 😊\n\n¡Disfruta!"
     )
 
-    return {"mensaje": "Usuario registrado. Email de bienvenida enviado."}  # Mensaje en español
+    return {"mensaje": "Usuario registrado. Email de bienvenida enviado."}
 
+
+# --- Inicio de sesión (login) ---
 @router.post("/login")
-async def iniciar_sesion(request: Request, db: Session = Depends(get_db)):
+async def iniciar_sesion(
+    request: Request,
+    db: Session = Depends(get_db)
+):
     datos = await request.json()
     correo = datos.get("mail")
     contrasena = datos.get("contrasena")
 
     if not correo or not contrasena:
-        raise HTTPException(400, "Faltan campos obligatorios")
+        raise HTTPException(status_code=400, detail="Faltan campos obligatorios.")
 
     usuario = db.query(User).filter_by(email=correo).first()
     if not usuario or not usuario.verify_password(contrasena):
-        raise HTTPException(401, "Correo o contraseña incorrectos")
+        raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos.")
 
     token = create_access_token(data={"sub": str(usuario.id)})
 
