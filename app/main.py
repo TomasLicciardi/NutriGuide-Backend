@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes import auth, analyze, history, user
 from app.database.connection import init_database
+from app.utils.error_handlers import register_error_handlers
 
 app = FastAPI(
     title="NutriGuide API",
@@ -28,3 +29,6 @@ app.include_router(auth.router)
 app.include_router(analyze.router)
 app.include_router(history.router)
 app.include_router(user.router)
+
+# Registrar manejadores de errores
+register_error_handlers(app)

@@ -1,3 +1,7 @@
+"""
+Rutas relacionadas con la gestión de usuarios.
+"""
+
 from fastapi import APIRouter, Request, HTTPException, Depends
 from app.utils.jwt import JWTBearer, extract_user_id
 from app.database.connection import get_db
@@ -6,6 +10,12 @@ from sqlalchemy.orm import Session
 from app.utils.security import verify_password, hash_password
 from app.utils.jwt import create_access_token
 from app.utils.mail import send_email
+from app.resources.user import (
+    get_user_by_id,
+    get_user_by_email,
+    create_user,
+    update_user_restrictions,
+)
 
 router = APIRouter(prefix="/user", tags=["user"])
 
@@ -22,10 +32,21 @@ def obtener_restricciones(token: str = Depends(JWTBearer()), db: Session = Depen
 async def actualizar_restricciones(
     request: Request,
     token: str = Depends(JWTBearer()),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
+    """
+    Actualiza las restricciones de un usuario autenticado.
+
+    Args:
+        request (Request): Solicitud HTTP con las nuevas restricciones.
+        token (str): Token JWT del usuario autenticado.
+        db (Session): Sesión de la base de datos.
+
+    Returns:
+        dict: Mensaje de confirmación y restricciones actualizadas.
+    """
     usuario_id = extract_user_id(token)
-    usuario = db.query(User).filter_by(id=usuario_id).first()
+    usuario = get_user_by_id(db, usuario_id)
 
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -33,8 +54,9 @@ async def actualizar_restricciones(
     data = await request.json()
     restricciones = data.get("restricciones", [])
 
-    usuario.set_restrictions(restricciones)
-    db.commit()
+    usuario = update_user_restrictions(db, usuario_id, restricciones)
+    if not usuario:
+        raise HTTPException(status_code=500, detail="Error al actualizar restricciones")
 
     return {"mensaje": "Restricciones actualizadas correctamente", "restricciones": restricciones}
 
@@ -129,3 +151,26 @@ async def reset_password(request: Request, db: Session = Depends(get_db)):
     db.commit()
 
     return {"mensaje": "Contraseña restablecida correctamente"}
+
+@router.get("/{user_id}")
+async def obtener_usuario(user_id: int, db: Session = Depends(get_db)):
+    """
+    Obtiene los detalles de un usuario por su ID.
+
+    Args:
+        user_id (int): ID del usuario.
+        db (Session): Sesión de la base de datos.
+
+    Returns:
+        User: Detalles del usuario encontrado.
+    """
+    usuario = get_user_by_id(db, user_id)
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    return usuario
+
+@router.post("/")
+async def crear_usuario(request: Request, db: Session = Depends(get_db)):
+    data = await request.json()
+    usuario = create_user(db, data)
+    return usuario

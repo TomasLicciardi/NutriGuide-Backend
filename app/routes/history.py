@@ -4,6 +4,7 @@ from app.database.connection import get_db
 from app.models import History, User, Product
 from app.utils.jwt import *
 import json
+from app.resources.history import get_history_by_user_id, create_history_for_user
 
 router = APIRouter(
     prefix="/history",  # Cambio a "history" en inglés
@@ -11,16 +12,30 @@ router = APIRouter(
     dependencies=[Depends(JWTBearer())]
 )
 
+"""
+Rutas relacionadas con el historial de análisis de los usuarios.
+"""
+
 # Obtener historial completo del usuario, ordenado por fecha (más reciente primero)
 @router.get("/")
 def obtener_historial(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
+    """
+    Obtiene el historial de análisis de un usuario autenticado.
+
+    Args:
+        token (str): Token JWT del usuario autenticado.
+        db (Session): Sesión de la base de datos.
+
+    Returns:
+        dict: Detalles del historial y productos analizados.
+    """
     usuario_id = extract_user_id(token)
 
-    historial = db.query(History).filter_by(user_id=usuario_id).first()
+    # Reemplazar consulta directa con get_history_by_user_id
+    historial = get_history_by_user_id(db, usuario_id)
     if not historial:
         raise HTTPException(status_code=404, detail="Historial no encontrado")
 
-    # Obtener productos ordenados por fecha (más reciente primero)
     productos = db.query(Product).filter_by(history_id=historial.id).order_by(Product.date.desc()).all()
 
     return {
@@ -77,18 +92,24 @@ async def eliminar_producto(id: int, token: str = Depends(JWTBearer()), db: Sess
 # Eliminar el historial completo de un usuario
 @router.delete("/")
 async def eliminar_historial(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
+    """
+    Elimina el historial de análisis de un usuario autenticado.
+
+    Args:
+        token (str): Token JWT del usuario autenticado.
+        db (Session): Sesión de la base de datos.
+
+    Returns:
+        dict: Mensaje de confirmación de la eliminación.
+    """
     usuario_id = extract_user_id(token)
 
-    # Buscar el historial del usuario
-    historial = db.query(History).filter_by(user_id=usuario_id).first()
-
+    # Reemplazar consulta directa con get_history_by_user_id
+    historial = get_history_by_user_id(db, usuario_id)
     if not historial:
         raise HTTPException(status_code=404, detail="Historial no encontrado")
 
-    # Eliminar todos los productos asociados al historial
     db.query(Product).filter_by(history_id=historial.id).delete()
-
-    # Eliminar el historial
     db.delete(historial)
     db.commit()
 
