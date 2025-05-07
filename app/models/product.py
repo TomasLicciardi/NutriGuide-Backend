@@ -1,5 +1,5 @@
 # app/models/product.py
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, LargeBinary
 from sqlalchemy.orm import relationship
 from app.database.connection import Base
 from datetime import datetime
@@ -12,5 +12,6 @@ class Product(Base):
     result_json = Column(Text, nullable=False)
     date = Column(DateTime, default=datetime.utcnow)
     history_id = Column(Integer, ForeignKey("histories.id"))
+    image = Column(LargeBinary, nullable=True)
 
     history = relationship("History", back_populates="products")
