@@ -61,12 +61,22 @@ async def actualizar_restricciones(
     return {"mensaje": "Restricciones actualizadas correctamente", "restricciones": restricciones}
 
 @router.put("/change-password", dependencies=[Depends(JWTBearer())])
-async def change_password(request: Request, db: Session = Depends(get_db)):
-    body = await request.json()
-    current_password = body.get("current_password")
-    new_password = body.get("new_password")
+async def cambiar_contrasena(request: Request, db: Session = Depends(get_db)):
+    """
+    Cambia la contraseña de un usuario autenticado.
 
-    if not current_password or not new_password:
+    Args:
+        request (Request): Solicitud HTTP con la contraseña actual y la nueva contraseña.
+        db (Session): Sesión de la base de datos.
+
+    Returns:
+        dict: Mensaje de confirmación del cambio de contraseña.
+    """
+    body = await request.json()
+    contrasena_actual = body.get("contrasena_actual")
+    nueva_contrasena = body.get("nueva_contrasena")
+
+    if not contrasena_actual or not nueva_contrasena:
         raise HTTPException(status_code=400, detail="Se requieren ambas contraseñas")
 
     token = request.headers.get("Authorization").split(" ")[1]
@@ -77,10 +87,10 @@ async def change_password(request: Request, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    if not verify_password(current_password, user.password):
+    if not verify_password(contrasena_actual, user.password):
         raise HTTPException(status_code=400, detail="La contraseña actual no es correcta")
 
-    user.password = hash_password(new_password)
+    user.password = hash_password(nueva_contrasena)
     db.commit()
 
     return {"mensaje": "Contraseña actualizada exitosamente"}

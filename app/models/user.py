@@ -10,7 +10,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, nullable=False)
-    email = Column(String, unique=True, nullable=False)
+    email = Column(String, unique=True, nullable=False)  # Cambiado de mail a email
     password = Column(String, nullable=False)
     restrictions = Column(Text, default="[]")
 

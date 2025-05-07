@@ -33,16 +33,16 @@ async def registrar_usuario(
         dict: Mensaje de confirmación del registro.
     """
     datos = await request.json()
-    correo = datos.get("mail")
+    email = datos.get("email")  # Cambiado de mail a email
 
     # Reemplazar consulta directa con get_user_by_email
-    if get_user_by_email(db, correo):
+    if get_user_by_email(db, email):
         raise HTTPException(status_code=409, detail="El correo ya está registrado.")
 
     # Crear usuario usando create_user
     usuario = create_user(db, {
         "username": datos.get("usuario"),
-        "email": correo,
+        "email": email,
         "password": hash_password(datos.get("contrasena")),
     })
     usuario.set_restrictions(datos.get("restricciones", []))
@@ -51,7 +51,7 @@ async def registrar_usuario(
     background_tasks.add_task(
         send_email,
         subject="¡Bienvenido a NutriGuide!",
-        recipients=[correo],
+        recipients=[email],
         body=f"Hola {usuario.username},\n\nGracias por registrarte en NutriGuide 😊\n\n¡Disfruta!"
     )
 
@@ -75,11 +75,11 @@ async def iniciar_sesion(
         dict: Token de acceso y tipo de token.
     """
     datos = await request.json()
-    correo = datos.get("mail")
+    email = datos.get("email")  # Cambiado de mail a email
     contrasena = datos.get("contrasena")
 
     # Reemplazar consulta directa con get_user_by_email
-    usuario = get_user_by_email(db, correo)
+    usuario = get_user_by_email(db, email)
     if not usuario or not usuario.verify_password(contrasena):
         raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos.")
 
