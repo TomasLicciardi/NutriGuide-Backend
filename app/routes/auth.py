@@ -18,7 +18,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/register")
 async def registrar_usuario(
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -26,20 +25,17 @@ async def registrar_usuario(
 
     Args:
         request (Request): Solicitud HTTP con los datos del usuario.
-        background_tasks (BackgroundTasks): Tareas en segundo plano para enviar emails.
         db (Session): Sesión de la base de datos.
 
     Returns:
         dict: Mensaje de confirmación del registro.
     """
     datos = await request.json()
-    email = datos.get("email")  # Cambiado de mail a email
+    email = datos.get("email")
 
-    # Reemplazar consulta directa con get_user_by_email
     if get_user_by_email(db, email):
         raise HTTPException(status_code=409, detail="El correo ya está registrado.")
 
-    # Crear usuario usando create_user
     usuario = create_user(db, {
         "username": datos.get("usuario"),
         "email": email,
@@ -48,14 +44,7 @@ async def registrar_usuario(
     usuario.set_restrictions(datos.get("restricciones", []))
     db.commit()
 
-    background_tasks.add_task(
-        send_email,
-        subject="¡Bienvenido a NutriGuide!",
-        recipients=[email],
-        body=f"Hola {usuario.username},\n\nGracias por registrarte en NutriGuide 😊\n\n¡Disfruta!"
-    )
-
-    return {"mensaje": "Usuario registrado. Email de bienvenida enviado."}
+    return {"mensaje": "Usuario registrado exitosamente"}
 
 
 # --- Inicio de sesión (login) ---
