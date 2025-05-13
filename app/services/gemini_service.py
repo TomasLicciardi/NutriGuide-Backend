@@ -35,11 +35,13 @@ Si el usuario proporciona una **lista personalizada** de restricciones, **evalú
 Si la lista está vacía, evalúa todas las ocho anteriores.
 
 Devuelve el resultado en formato JSON con las claves:
-- Ingredientes: string
-- Puede contener: string o null
-- Clasificación: objeto donde cada restricción evaluada tenga:
+- ingredientes: string
+- puede_contener: string o null
+- clasificacion: objeto donde cada restricción evaluada tenga:
     - `"apto": true|false`
-    - `"razón": breve explicación
+    - `"razon": string (solo proporcionar si apto es false)`
+
+La razón solo debe incluirse cuando el producto NO es apto para esa restricción específica.
 """
 
 async def analizar_imagen(file, restricciones: list[str] | None = None):

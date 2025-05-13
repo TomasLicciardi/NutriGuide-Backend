@@ -5,19 +5,20 @@ from app.services.gemini_service import analizar_imagen
 from app.database.connection import get_db
 from app.models import History, Product, User
 from app.utils.jwt import JWTBearer, extract_user_id
-import json
+from app.schemas.auth_schemas import Token
+from app.schemas.product_schemas import ImageType, ProductAnalysisResponse
 from app.resources.history import get_history_by_user_id, create_history_for_user
 from app.resources.user import get_user_by_id
-from app.resources.product import create_product  # Importar función para crear productos
+from app.resources.product import create_product
+import json
 
 """
 Rutas relacionadas con el análisis de productos alimenticios.
 """
 
-router = APIRouter(prefix="/analysis", tags=["analysis"])  # Cambio a "analysis" en inglés
+router = APIRouter(prefix="/analysis", tags=["analysis"])
 
-
-@router.post("/")
+@router.post("/", response_model=ProductAnalysisResponse)
 async def analizar_producto(
     file: UploadFile = File(...),
     token: str = Depends(JWTBearer()),
@@ -32,26 +33,58 @@ async def analizar_producto(
         db (Session): Sesión de la base de datos.
 
     Returns:
-        JSONResponse: Resultado del análisis y detalles del producto creado.
+        ProductAnalysisResponse: Resultado del análisis y detalles del producto creado.
     """
     usuario_id = extract_user_id(token)
 
-    # Reemplazar consulta directa con get_history_by_user_id
+    # Obtener o crear el historial del usuario
     historial = get_history_by_user_id(db, usuario_id)
     if not historial:
         historial = create_history_for_user(db, usuario_id)
 
-    # Reemplazar consulta directa con get_user_by_id
+    # Obtener las restricciones del usuario
     usuario = get_user_by_id(db, usuario_id)
     restricciones = usuario.get_restrictions() if usuario else []
 
+    # Analizar la imagen
     resultado = await analizar_imagen(file, restricciones=restricciones)
+    
+    # Validar y obtener el tipo de imagen
+    content_type = file.content_type
+    if not content_type:
+        # Intentar determinar el tipo de imagen por la extensión del archivo
+        if file.filename.lower().endswith('.png'):
+            content_type = ImageType.PNG.value
+        elif file.filename.lower().endswith('.webp'):
+            content_type = ImageType.WEBP.value
+        elif file.filename.lower().endswith('.gif'):
+            content_type = ImageType.GIF.value
+        else:
+            content_type = ImageType.JPEG.value
+    
+    # Verificar que el tipo de imagen es soportado
+    try:
+        image_type = ImageType(content_type)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de imagen no soportado. Tipos permitidos: {', '.join([t.value for t in ImageType])}"
+        )
+    
+    # Leer los datos de la imagen
+    image_data = await file.read()
+    
+    # Crear el producto con la nueva estructura
+    nuevo_producto = create_product(
+        db, 
+        result_json=resultado,
+        history_id=historial.id,
+        image_type=image_type.value,
+        image_data=image_data
+    )
 
-    # Usar la función centralizada para crear productos
-    nuevo_producto = create_product(db, name=file.filename, result_json=json.dumps(resultado), history_id=historial.id)
-
-    return JSONResponse(content={
-        "mensaje": "Análisis completado y guardado.",  # Mensaje en español
-        "producto_id": nuevo_producto.id,
-        "resultado": resultado
-    })
+    return ProductAnalysisResponse(
+        product_id=nuevo_producto.id,
+        is_suitable=nuevo_producto.is_suitable,
+        result_json=resultado
+    )

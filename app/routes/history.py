@@ -1,13 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 from app.database.connection import get_db
-from app.models import History, User, Product
-from app.utils.jwt import *
-import json
+from app.models import History, Product
+from app.utils.jwt import JWTBearer, extract_user_id
+from app.schemas.history_schemas import HistoryResponse, ProductDetailResponse, DeleteResponse
 from app.resources.history import get_history_by_user_id, create_history_for_user
+import json
+from io import BytesIO
 
 router = APIRouter(
-    prefix="/history",  # Cambio a "history" en inglés
+    prefix="/history",
     tags=["History"],
     dependencies=[Depends(JWTBearer())]
 )
@@ -16,43 +20,34 @@ router = APIRouter(
 Rutas relacionadas con el historial de análisis de los usuarios.
 """
 
-# Obtener historial completo del usuario, ordenado por fecha (más reciente primero)
-@router.get("/")
+@router.get("/", response_model=HistoryResponse)
 def obtener_historial(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
     """
     Obtiene el historial de análisis de un usuario autenticado.
-
-    Args:
-        token (str): Token JWT del usuario autenticado.
-        db (Session): Sesión de la base de datos.
-
-    Returns:
-        dict: Detalles del historial y productos analizados.
+    Lista todos los productos ordenados por fecha, mostrando solo información básica.
     """
     usuario_id = extract_user_id(token)
-
-    # Reemplazar consulta directa con get_history_by_user_id
     historial = get_history_by_user_id(db, usuario_id)
     if not historial:
         raise HTTPException(status_code=404, detail="Historial no encontrado")
 
-    productos = db.query(Product).filter_by(history_id=historial.id).order_by(Product.date.desc()).all()
+    productos = db.query(Product).filter_by(history_id=historial.id).order_by(desc(Product.date)).all()
 
-    return {
-        "historial_id": historial.id,
-        "usuario_id": historial.user_id,
-        "productos_analizados": [
-            {
-                "id": p.id,
-                "resultado": json.loads(p.result_json),
-                "fecha": p.date
-            } for p in productos
-        ]
-    }
+    return HistoryResponse(
+        historial_id=historial.id,
+        usuario_id=historial.user_id,
+        productos=[{
+            "id": p.id,
+            "date": p.date,
+            "is_suitable": p.is_suitable
+        } for p in productos]
+    )
 
-# Obtener un producto analizado específico
-@router.get("/{id}")
+@router.get("/{id}", response_model=ProductDetailResponse)
 def obtener_producto(id: int, token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
+    """
+    Obtiene los detalles completos de un producto específico.
+    """
     usuario_id = extract_user_id(token)
 
     producto = db.query(Product).join(History).filter(
@@ -62,16 +57,47 @@ def obtener_producto(id: int, token: str = Depends(JWTBearer()), db: Session = D
 
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
+    
+    result_json = json.loads(producto.result_json)
 
-    return {
-        "id": producto.id,
-        "resultado": json.loads(producto.result_json),
-        "fecha": producto.date
-    }
+    return ProductDetailResponse(
+        id=producto.id,
+        date=producto.date,
+        is_suitable=producto.is_suitable,
+        result_json=result_json,
+        image_type=producto.image_type,
+        image_url=f"/history/product/{producto.id}/image"
+    )
+
+@router.get("/product/{id}/image")
+async def obtener_imagen_producto(
+    id: int,
+    token: str = Depends(JWTBearer()),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtiene la imagen de un producto específico.
+    """
+    usuario_id = extract_user_id(token)
+    producto = db.query(Product).join(History).filter(
+        Product.id == id,
+        History.user_id == usuario_id
+    ).first()
+
+    if not producto or not producto.image:
+        raise HTTPException(status_code=404, detail="Imagen no encontrada")
+
+    return StreamingResponse(
+        BytesIO(producto.image),
+        media_type=producto.image_type
+    )
 
 # Eliminar un producto específico del historial
-@router.delete("/product/{id}")
+@router.delete("/product/{id}", response_model=DeleteResponse)
 async def eliminar_producto(id: int, token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
+    """
+    Elimina un producto específico del historial.
+    """
     usuario_id = extract_user_id(token)
 
     # Buscar el producto específico con su historial
@@ -87,20 +113,13 @@ async def eliminar_producto(id: int, token: str = Depends(JWTBearer()), db: Sess
     db.delete(producto)
     db.commit()
 
-    return {"mensaje": "Producto eliminado exitosamente"}
+    return DeleteResponse(mensaje="Producto eliminado exitosamente")
 
 # Eliminar el historial completo de un usuario
-@router.delete("/")
+@router.delete("/", response_model=DeleteResponse)
 async def eliminar_historial(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
     """
-    Elimina el historial de análisis de un usuario autenticado.
-
-    Args:
-        token (str): Token JWT del usuario autenticado.
-        db (Session): Sesión de la base de datos.
-
-    Returns:
-        dict: Mensaje de confirmación de la eliminación.
+    Elimina todo el historial del usuario.
     """
     usuario_id = extract_user_id(token)
 
@@ -113,4 +132,4 @@ async def eliminar_historial(token: str = Depends(JWTBearer()), db: Session = De
     db.delete(historial)
     db.commit()
 
-    return {"mensaje": "Historial y productos asociados eliminados exitosamente"}
+    return DeleteResponse(mensaje="Historial y productos asociados eliminados exitosamente")
