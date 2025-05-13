@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+import base64
 from app.database.connection import get_db
 from app.models import History, Product
 from app.utils.jwt import JWTBearer, extract_user_id
@@ -43,30 +44,31 @@ def obtener_historial(token: str = Depends(JWTBearer()), db: Session = Depends(g
         } for p in productos]
     )
 
-@router.get("/{id}", response_model=ProductDetailResponse)
+@router.get("/product/{id}", response_model=ProductDetailResponse)
 def obtener_producto(id: int, token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
     """
     Obtiene los detalles completos de un producto específico.
     """
     usuario_id = extract_user_id(token)
-
+    
     producto = db.query(Product).join(History).filter(
         Product.id == id,
         History.user_id == usuario_id
     ).first()
-
+    
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     
     result_json = json.loads(producto.result_json)
-
+    image_url = f"/history/product/{producto.id}/image"
+    
     return ProductDetailResponse(
         id=producto.id,
         date=producto.date,
         is_suitable=producto.is_suitable,
         result_json=result_json,
         image_type=producto.image_type,
-        image_url=f"/history/product/{producto.id}/image"
+        image_url=image_url
     )
 
 @router.get("/product/{id}/image")

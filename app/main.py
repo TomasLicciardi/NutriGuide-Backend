@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import auth, analyze, history, user
+from app.routes import auth, analyze, history, user, product
 from app.database.connection import init_database
 from app.utils.error_handlers import register_error_handlers
 
@@ -29,6 +29,7 @@ app.include_router(auth.router)
 app.include_router(analyze.router)
 app.include_router(history.router)
 app.include_router(user.router)
+app.include_router(product.router)
 
 # Registrar manejadores de errores
 register_error_handlers(app)

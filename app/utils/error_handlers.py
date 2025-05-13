@@ -1,37 +1,47 @@
-from fastapi import Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
+from typing import Union, Dict, Any
 
-def register_error_handlers(app):
+class AppError(Exception):
+    def __init__(self, status_code: int, detail: Union[str, Dict[str, Any]]):
+        self.status_code = status_code
+        self.detail = detail
+
+async def validation_error_handler(request: Request, exc: ValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                {
+                    "loc": error["loc"],
+                    "msg": error["msg"],
+                    "type": error["type"]
+                }
+                for error in exc.errors()
+            ]
+        }
+    )
+
+async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Error en la base de datos. Por favor, inténtelo de nuevo más tarde."
+        }
+    )
+
+async def app_error_handler(request: Request, exc: AppError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail}
+    )
+
+def register_error_handlers(app: FastAPI):
     """
-    Registra los manejadores de errores globales en la aplicación FastAPI.
+    Registra los manejadores de errores en la aplicación.
     """
-
-    @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException):
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"detail": exc.detail},
-        )
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError):
-        return JSONResponse(
-            status_code=422,
-            content={"detail": exc.errors()},
-        )
-
-    @app.exception_handler(SQLAlchemyError)
-    async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
-        return JSONResponse(
-            status_code=500,
-            content={"detail": "Error interno en la base de datos."},
-        )
-
-    @app.exception_handler(Exception)
-    async def general_exception_handler(request: Request, exc: Exception):
-        return JSONResponse(
-            status_code=500,
-            content={"detail": "Error interno del servidor."},
-        )
+    app.add_exception_handler(ValidationError, validation_error_handler)
+    app.add_exception_handler(SQLAlchemyError, sqlalchemy_error_handler)
+    app.add_exception_handler(AppError, app_error_handler)

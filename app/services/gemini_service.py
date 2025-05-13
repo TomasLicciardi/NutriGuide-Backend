@@ -44,9 +44,8 @@ Devuelve el resultado en formato JSON con las claves:
 La razón solo debe incluirse cuando el producto NO es apto para esa restricción específica.
 """
 
-async def analizar_imagen(file, restricciones: list[str] | None = None):
+async def analizar_imagen(contenido: bytes, restricciones: list[str] | None = None):
     # 1. Preprocesa la imagen
-    contenido = await file.read()
     imagen = comprimir_imagen(contenido)
 
     # 2. Construye el prompt dinámico
@@ -55,10 +54,18 @@ async def analizar_imagen(file, restricciones: list[str] | None = None):
         prompt += "\n\n**Solo evaluar estas restricciones:** " + ", ".join(restricciones) + "."
 
     # 3. Llamada al modelo multimodal
-    respuesta = model.generate_content([prompt, imagen])
-
-    # 4. Extrae el JSON de entre los ```json
+    respuesta = model.generate_content([prompt, imagen])    # 4. Extrae el JSON de entre los ```json
     m = re.search(r"```json\n(.*?)```", respuesta.text, re.DOTALL)
-    if m:
-        return json.loads(m.group(1))
-    return {"error": "No se pudo interpretar la respuesta de Gemini."}
+    if not m:
+        return {"error": "No se pudo interpretar la respuesta de Gemini."}
+    
+    resultado = json.loads(m.group(1))
+    
+    # 5. Limpia el resultado eliminando razones cuando el producto es apto
+    clasificacion = resultado.get('clasificacion', {})
+    for restriccion in clasificacion:
+        if clasificacion[restriccion].get('apto', True):
+            # Si es apto, eliminar la razón si existe
+            clasificacion[restriccion] = {'apto': True}
+    
+    return resultado

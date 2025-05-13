@@ -46,8 +46,8 @@ async def analizar_producto(
     usuario = get_user_by_id(db, usuario_id)
     restricciones = usuario.get_restrictions() if usuario else []
 
-    # Analizar la imagen
-    resultado = await analizar_imagen(file, restricciones=restricciones)
+    # Leer el contenido de la imagen una sola vez
+    image_data = await file.read()
     
     # Validar y obtener el tipo de imagen
     content_type = file.content_type
@@ -71,8 +71,8 @@ async def analizar_producto(
             detail=f"Tipo de imagen no soportado. Tipos permitidos: {', '.join([t.value for t in ImageType])}"
         )
     
-    # Leer los datos de la imagen
-    image_data = await file.read()
+    # Analizar la imagen pasando los bytes directamente
+    resultado = await analizar_imagen(image_data, restricciones=restricciones)
     
     # Crear el producto con la nueva estructura
     nuevo_producto = create_product(
