@@ -12,36 +12,34 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-2.0-flash-lite")
 
 BASE_PROMPT = """
-Esta es una imagen de la etiqueta de un producto alimenticio.
+Analiza la imagen de una etiqueta de producto alimenticio de forma precisa y estructurada. 
 
-Tu tarea es:
-1. Extraer únicamente la lista de ingredientes en una sola línea, separados por comas.
-2. Indicar si aparece una sección que diga "PUEDE CONTENER" o "CONTIENTE", y qué menciona ahí.
-3. Evaluar si contiene ingredientes NO APTOS para las siguientes restricciones (solo las que se especifiquen más abajo):
+Sigue estas instrucciones exactamente:
 
-   1. Celíacos (sin gluten)
-   2. Intolerantes a la lactosa
-   3. Veganos
-   4. Vegetarianos
-   5. Alérgicos a frutos secos
-   6. Alérgicos a la soja
-   7. Sin azúcar añadida (apto diabéticos)
-   8. Bajo en sodio (sin sal añadida)
-   9. Halal
-   10. Sin ingredientes artificiales (colorantes, conservantes, saborizantes, etc.)
-   11. Otros (especificar)
+1. Extrae la lista de ingredientes y escribe todos los ingredientes encontrados en una única línea, separados por comas. No incluyas encabezados como "Ingredientes:", ni puntos, ni información adicional.
+2. Si en la etiqueta aparece una sección que diga "PUEDE CONTENER" o "CONTIENTE", copia literalmente su contenido. Si no aparece, devuelve null.
+3. Evalúa si el producto contiene ingredientes NO APTOS para ciertas restricciones alimenticias.
 
-Si el usuario proporciona una **lista personalizada** de restricciones, **evalúa únicamente esas**.  
-Si la lista está vacía, evalúa todas las ocho anteriores.
+- Si el usuario proporciona una lista personalizada de restricciones, analiza **únicamente** esas.
+- Si la lista está vacía, evalúa **todas** las restricciones predeterminadas.
 
-Devuelve el resultado en formato JSON con las claves:
-- ingredientes: string
-- puede_contener: string o null
-- clasificacion: objeto donde cada restricción evaluada tenga:
-    - `"apto": true|false`
-    - `"razon": string (solo proporcionar si apto es false)`
+Para cada restricción evaluada:
+- Usa `"apto": true` si es apto.
+- Usa `"apto": false` y proporciona una clave `"razon"` con una justificación **clara y breve** basada en los ingredientes.
+- Si es apto, **NO** incluyas la clave `"razon"`.
 
-La razón solo debe incluirse cuando el producto NO es apto para esa restricción específica.
+Devuelve el resultado **en un único bloque de código JSON**, encerrado entre ```json y ```.
+
+Ejemplo de formato:
+```json
+{
+  "ingredientes": "agua, azúcar, jarabe de glucosa, colorante natural",
+  "puede_contener": "SOJA Y DERIVADOS DE TRIGO",
+  "clasificacion": {
+    "vegano": { "apto": false, "razon": "Contiene caseinato de sodio" },
+    "celiaco": { "apto": true }
+  }
+}
 """
 
 async def analizar_imagen(contenido: bytes, restricciones: list[str] | None = None):

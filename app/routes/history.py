@@ -99,10 +99,10 @@ async def obtener_imagen_producto(
 async def eliminar_producto(id: int, token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
     """
     Elimina un producto específico del historial.
+    Si es el último producto, también se elimina el historial.
     """
     usuario_id = extract_user_id(token)
 
-    # Buscar el producto específico con su historial
     producto = db.query(Product).join(History).filter(
         Product.id == id,
         History.user_id == usuario_id
@@ -111,11 +111,23 @@ async def eliminar_producto(id: int, token: str = Depends(JWTBearer()), db: Sess
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-    # Eliminar el producto de la base de datos
+    history_id = producto.history_id
+
+    # Eliminar el producto
     db.delete(producto)
     db.commit()
 
-    return DeleteResponse(mensaje="Producto eliminado exitosamente")
+    # Verificar si ya no quedan productos asociados a ese historial
+    productos_restantes = db.query(Product).filter_by(history_id=history_id).count()
+    if productos_restantes == 0:
+        historial = db.query(History).filter_by(id=history_id).first()
+        if historial:
+            db.delete(historial)
+            db.commit()
+        return DeleteResponse(mensaje="Producto eliminado. También se eliminó el historial vacío.")
+
+    return DeleteResponse(mensaje="Producto eliminado exitosamente.")
+
 
 # Eliminar el historial completo de un usuario
 @router.delete("/", response_model=DeleteResponse)
