@@ -19,6 +19,30 @@ from app.resources.user import (
 
 router = APIRouter(prefix="/user", tags=["user"])
 
+@router.get("/profile")
+def obtener_perfil(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
+    """
+    Obtiene el perfil del usuario autenticado.
+
+    Args:
+        token (str): Token JWT del usuario autenticado.
+        db (Session): Sesión de la base de datos.
+
+    Returns:
+        dict: Información del perfil del usuario (id, username, email, restrictions).
+    """
+    usuario_id = extract_user_id(token)
+    usuario = db.query(User).filter(User.id == usuario_id).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    return {
+        "id": usuario.id,
+        "username": usuario.username,
+        "email": usuario.email,
+        "restrictions": usuario.get_restrictions()
+    }
+
 @router.get("/restrictions")
 def obtener_restricciones(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
     usuario_id = extract_user_id(token)
@@ -127,9 +151,7 @@ Si no solicitaste este cambio, puedes ignorar este correo.
 
 Saludos,
 El equipo de NutriGuide
-"""
-
-    # Enviar correo
+"""    # Enviar correo
     await send_email(
         subject="Recuperación de contraseña - NutriGuide",
         recipients=[user.email],
@@ -138,7 +160,7 @@ El equipo de NutriGuide
 
     return {"mensaje": "Se envió un email con instrucciones para recuperar la contraseña"}
 
-router.post("/reset-password")
+@router.post("/reset-password")
 async def reset_password(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
     reset_token = data.get("reset_token")

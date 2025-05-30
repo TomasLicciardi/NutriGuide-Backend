@@ -35,9 +35,7 @@ async def analizar_producto(
     Returns:
         ProductAnalysisResponse: Resultado del análisis y detalles del producto creado.
     """
-    usuario_id = extract_user_id(token)
-
-    # Obtener o crear el historial del usuario
+    usuario_id = extract_user_id(token)    # Obtener o crear el historial del usuario
     historial = get_history_by_user_id(db, usuario_id)
     if not historial:
         historial = create_history_for_user(db, usuario_id)
@@ -70,18 +68,35 @@ async def analizar_producto(
             status_code=400,
             detail=f"Tipo de imagen no soportado. Tipos permitidos: {', '.join([t.value for t in ImageType])}"
         )
-    
-    # Analizar la imagen pasando los bytes directamente
-    resultado = await analizar_imagen(image_data, restricciones=restricciones)
+      # Analizar la imagen pasando los bytes directamente
+    try:
+        print(f"Iniciando análisis de imagen: {len(image_data)} bytes, con restricciones: {restricciones}")
+        resultado = await analizar_imagen(image_data, restricciones=restricciones)
+        print(f"Análisis completado correctamente")
+    except Exception as e:
+        print(f"Error durante el análisis de la imagen: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al analizar la imagen: {str(e)}"
+        )
     
     # Crear el producto con la nueva estructura
-    nuevo_producto = create_product(
-        db, 
-        result_json=resultado,
-        history_id=historial.id,
-        image_type=image_type.value,
-        image_data=image_data
-    )
+    try:
+        print(f"Creando producto en la base de datos")
+        nuevo_producto = create_product(
+            db, 
+            result_json=resultado,
+            history_id=historial.id,
+            image_type=image_type.value,
+            image_data=image_data
+        )
+        print(f"Producto creado correctamente con ID: {nuevo_producto.id}")
+    except Exception as e:
+        print(f"Error al crear el producto en la base de datos: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al guardar el producto: {str(e)}"
+        )
 
     return ProductAnalysisResponse(
         product_id=nuevo_producto.id,
