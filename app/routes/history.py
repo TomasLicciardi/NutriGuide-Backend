@@ -21,28 +21,30 @@ router = APIRouter(
 Rutas relacionadas con el historial de análisis de los usuarios.
 """
 
-@router.get("/", response_model=HistoryResponse)
+@router.get("/")
 def obtener_historial(token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
     """
     Obtiene el historial de análisis de un usuario autenticado.
     Lista todos los productos ordenados por fecha, mostrando solo información básica.
+    Si no existe historial, devuelve una lista vacía.
     """
     usuario_id = extract_user_id(token)
     historial = get_history_by_user_id(db, usuario_id)
+    
     if not historial:
-        raise HTTPException(status_code=404, detail="Historial no encontrado")
+        # Retornar lista vacía en lugar de error 404
+        return []
 
     productos = db.query(Product).filter_by(history_id=historial.id).order_by(desc(Product.date)).all()
 
-    return HistoryResponse(
-        historial_id=historial.id,
-        usuario_id=historial.user_id,
-        productos=[{
-            "id": p.id,
-            "date": p.date,
-            "is_suitable": p.is_suitable
-        } for p in productos]
-    )
+    return [{
+        "id": p.id,
+        "date": p.date,
+        "is_suitable": p.is_suitable,
+        "name": p.name,
+        "result_json": p.result_json,
+        "image_type": p.image_type
+    } for p in productos]
 
 @router.get("/product/{id}", response_model=ProductDetailResponse)
 def obtener_producto(id: int, token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):

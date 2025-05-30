@@ -50,7 +50,7 @@ def obtener_restricciones(token: str = Depends(JWTBearer()), db: Session = Depen
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    return {"restricciones": usuario.get_restrictions()}
+    return usuario.get_restrictions()
 
 @router.put("/restrictions")
 async def actualizar_restricciones(
@@ -76,36 +76,39 @@ async def actualizar_restricciones(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     data = await request.json()
-    restricciones = data.get("restricciones", [])
+    restricciones = data.get("restrictions", data.get("restricciones", []))
 
     usuario = update_user_restrictions(db, usuario_id, restricciones)
     if not usuario:
         raise HTTPException(status_code=500, detail="Error al actualizar restricciones")
 
-    return {"mensaje": "Restricciones actualizadas correctamente", "restricciones": restricciones}
+    return {"mensaje": "Restricciones actualizadas correctamente", "restricciones": usuario.get_restrictions()}
 
-@router.put("/change-password", dependencies=[Depends(JWTBearer())])
-async def cambiar_contrasena(request: Request, db: Session = Depends(get_db)):
+@router.put("/change-password")
+async def cambiar_contrasena(
+    request: Request, 
+    token: str = Depends(JWTBearer()),
+    db: Session = Depends(get_db)
+):
     """
     Cambia la contraseña de un usuario autenticado.
 
     Args:
         request (Request): Solicitud HTTP con la contraseña actual y la nueva contraseña.
+        token (str): Token JWT del usuario autenticado.
         db (Session): Sesión de la base de datos.
 
     Returns:
         dict: Mensaje de confirmación del cambio de contraseña.
     """
     body = await request.json()
-    contrasena_actual = body.get("contrasena_actual")
-    nueva_contrasena = body.get("nueva_contrasena")
+    contrasena_actual = body.get("current_password")
+    nueva_contrasena = body.get("new_password")
 
     if not contrasena_actual or not nueva_contrasena:
         raise HTTPException(status_code=400, detail="Se requieren ambas contraseñas")
 
-    token = request.headers.get("Authorization").split(" ")[1]
     user_id = extract_user_id(token)
-
     user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
