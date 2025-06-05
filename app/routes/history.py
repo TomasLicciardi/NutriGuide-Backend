@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+﻿from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -34,16 +34,14 @@ def obtener_historial(token: str = Depends(JWTBearer()), db: Session = Depends(g
     if not historial:
         # Retornar lista vacía en lugar de error 404
         return []
-
+        
     productos = db.query(Product).filter_by(history_id=historial.id).order_by(desc(Product.date)).all()
-
+    
+    # Devolver solo información básica para la lista
     return [{
         "id": p.id,
         "date": p.date,
-        "is_suitable": p.is_suitable,
-        "name": p.name,
-        "result_json": p.result_json,
-        "image_type": p.image_type
+        "is_suitable": p.is_suitable
     } for p in productos]
 
 @router.get("/product/{id}", response_model=ProductDetailResponse)

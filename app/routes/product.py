@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+﻿from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from app.database.connection import get_db
@@ -74,24 +74,24 @@ async def obtener_producto(product_id: int, db: Session = Depends(get_db)):
 
     Returns:
         dict: Detalles del producto.
-    """
+    """   
     producto = db.query(Product).filter(Product.id == product_id).first()
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
-
+        
     return {
         "id": producto.id,
-        "name": producto.name,
         "result_json": producto.result_json,
         "date": producto.date,
+        "is_suitable": producto.is_suitable,
         "image_url": f"/products/{producto.id}/image"  # URL para obtener la imagen
     }
 
 @router.post("/products")
 async def crear_producto(
-    name: str,
     result_json: str,
     history_id: int,
+    is_suitable: bool,
     image: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
@@ -99,20 +99,37 @@ async def crear_producto(
     Crea un nuevo producto con una imagen opcional.
 
     Args:
-        name (str): Nombre del producto.
         result_json (str): Resultado del análisis en formato JSON.
         history_id (int): ID del historial asociado.
+        is_suitable (bool): Indica si el producto es apto.
         image (UploadFile): Imagen del producto.
         db (Session): Sesión de la base de datos.
 
     Returns:
         dict: Detalles del producto creado.
     """
+    # Determinar el tipo de imagen si existe
+    image_data = None
+    image_type = "image/jpeg"  # valor por defecto
+    
+    if image:
+        image_data = await image.read()
+        if image.content_type:
+            image_type = image.content_type
+        elif image.filename:
+            if image.filename.lower().endswith('.png'):
+                image_type = "image/png"
+            elif image.filename.lower().endswith('.webp'):
+                image_type = "image/webp"
+            elif image.filename.lower().endswith('.gif'):
+                image_type = "image/gif"
+    
     producto = Product(
-        name=name,
         result_json=result_json,
+        is_suitable=is_suitable,
         history_id=history_id,
-        image=await image.read() if image else None
+        image=image_data,
+        image_type=image_type
     )
     db.add(producto)
     db.commit()
