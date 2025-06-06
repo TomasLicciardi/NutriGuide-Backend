@@ -144,6 +144,6 @@ async def eliminar_historial(token: str = Depends(JWTBearer()), db: Session = De
 
     db.query(Product).filter_by(history_id=historial.id).delete()
     db.delete(historial)
-    db.commit()
+    db.commit() 
 
     return DeleteResponse(mensaje="Historial y productos asociados eliminados exitosamente")
