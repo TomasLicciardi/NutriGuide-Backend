@@ -100,24 +100,23 @@ async def cambiar_contrasena(
 
     Returns:
         dict: Mensaje de confirmación del cambio de contraseña.
-    """
+    """    
     body = await request.json()
-    contrasena_actual = body.get("current_password")
-    nueva_contrasena = body.get("new_password")
+    current_password = body.get("current_password")
+    new_password = body.get("new_password")
 
-    if not contrasena_actual or not nueva_contrasena:
+    if not current_password or not new_password:
         raise HTTPException(status_code=400, detail="Se requieren ambas contraseñas")
 
     user_id = extract_user_id(token)
     user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-    if not verify_password(contrasena_actual, user.password):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")    
+    if not verify_password(current_password, user.password):
         raise HTTPException(status_code=400, detail="La contraseña actual no es correcta")
 
-    user.password = hash_password(nueva_contrasena)
+    user.password = hash_password(new_password)
     db.commit()
 
     return {"mensaje": "Contraseña actualizada exitosamente"}

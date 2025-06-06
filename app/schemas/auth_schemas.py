@@ -2,13 +2,13 @@ from pydantic import BaseModel, EmailStr
 
 class UserLogin(BaseModel):
     email: EmailStr
-    contrasena: str
+    password: str
 
 class UserRegister(BaseModel):
-    usuario: str
+    username: str
     email: EmailStr
-    contrasena: str
-    restricciones: list[str] = []
+    password: str
+    restrictions: list[str] = []
 
 class Token(BaseModel):
     access_token: str

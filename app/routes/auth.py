@@ -4,12 +4,11 @@ Rutas relacionadas con la autenticación de usuarios (registro e inicio de sesi�
 
 # app/routes/auth.py
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from app.database.connection import get_db
 from app.utils.security import hash_password
-from app.utils.jwt import create_access_token, JWTBearer
-from app.utils.mail import send_email
+from app.utils.jwt import create_access_token
 from app.resources.user import get_user_by_email, create_user
 from app.schemas.auth_schemas import UserLogin, UserRegister, Token
 
@@ -34,15 +33,19 @@ async def registrar_usuario(
     if get_user_by_email(db, user_data.email):
         raise HTTPException(status_code=409, detail="El correo ya está registrado.")
 
-    usuario = create_user(db, {
-        "username": user_data.usuario,
+    nuevo_usuario = create_user(db, {
+        "username": user_data.username,
         "email": user_data.email,
-        "password": hash_password(user_data.contrasena),
+        "password": hash_password(user_data.password),
     })
-    usuario.set_restrictions(user_data.restricciones)
+
+    # Establecer restricciones alimentarias si se proporcionan
+    if user_data.restrictions:
+        nuevo_usuario.set_restrictions(user_data.restrictions)
+
     db.commit()
 
-    return {"mensaje": "Usuario registrado exitosamente"}
+    return {"mensaje": "Usuario registrado exitosamente."}
 
 # --- Inicio de sesión (login) ---
 @router.post("/login", response_model=Token)
@@ -61,7 +64,8 @@ async def iniciar_sesion(
         Token: Token de acceso y tipo de token.
     """
     usuario = get_user_by_email(db, user_data.email)
-    if not usuario or not usuario.verify_password(user_data.contrasena):
+
+    if not usuario or not usuario.verify_password(user_data.password):
         raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos.")
 
     token = create_access_token(data={"sub": str(usuario.id)})
