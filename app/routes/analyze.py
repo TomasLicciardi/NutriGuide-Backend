@@ -70,11 +70,8 @@ async def analizar_producto(
         )
       # Analizar la imagen pasando los bytes directamente
     try:
-        print(f"Iniciando análisis de imagen: {len(image_data)} bytes, con restricciones: {restricciones}")
         resultado = await analizar_imagen(image_data, restricciones=restricciones)
-        print(f"Análisis completado correctamente")
     except Exception as e:
-        print(f"Error durante el análisis de la imagen: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Error al analizar la imagen: {str(e)}"
@@ -82,7 +79,6 @@ async def analizar_producto(
     
     # Crear el producto con la nueva estructura
     try:
-        print(f"Creando producto en la base de datos")
         nuevo_producto = create_product(
             db, 
             result_json=resultado,
@@ -90,9 +86,7 @@ async def analizar_producto(
             image_type=image_type.value,
             image_data=image_data
         )
-        print(f"Producto creado correctamente con ID: {nuevo_producto.id}")
     except Exception as e:
-        print(f"Error al crear el producto en la base de datos: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail=f"Error al guardar el producto: {str(e)}"
