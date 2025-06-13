@@ -27,10 +27,15 @@ def create_product(db: Session, result_json: dict, history_id: int, image_type: 
 
     Returns:
         Product: Producto creado.
-    """
-    # Determinar si el producto es apto basado en el resultado del análisis
+    """    # Determinar si el producto es apto basado en el resultado del análisis
     clasificacion = result_json.get('clasificacion', {})
-    is_suitable = all(info.get('apto', True) for info in clasificacion.values())
+    
+    # Si no hay clasificaciones (usuario sin restricciones), el producto es apto
+    if not clasificacion or len(clasificacion) == 0:
+        is_suitable = True
+    else:
+        # Si hay clasificaciones, verificar que todas sean aptas
+        is_suitable = all(info.get('apto', True) for info in clasificacion.values())
     
     product = Product(
         result_json=json.dumps(result_json),
