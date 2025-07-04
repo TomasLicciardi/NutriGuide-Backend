@@ -29,40 +29,25 @@ Sigue estas instrucciones exactamente:
 
 DEFINICIONES CRÍTICAS - LEE CUIDADOSAMENTE:
 
-**VEGETARIANO (vegetariano)**: 
-Los vegetarianos pueden consumir productos derivados de animales VIVOS, pero NO productos que requieran la muerte del animal.
+**VEGANO (vegano)**:
+Los veganos NO pueden consumir NINGÚN producto de origen animal, sin importar si el animal está vivo o muerto.
 
-- NO PUEDEN CONSUMIR (productos que requieren muerte del animal):
+- NO PUEDEN CONSUMIR (TODO lo de origen animal):
   * Carne de cualquier tipo (res, cerdo, cordero, etc.)
   * Aves (pollo, pavo, pato, etc.)
   * Pescados y mariscos (salmón, atún, camarones, etc.)
+  * Productos lácteos (leche, queso, mantequilla, suero de leche, caseína, etc.)
+  * Huevos y derivados (clara de huevo, yema de huevo, lecitina de huevo)
+  * Miel y productos de abejas
   * Gelatina animal (obtenida de huesos y cartílagos)
   * Renina animal (enzima del estómago de terneros)
   * Extractos de carne o pescado
   * Grasa animal (sebo, manteca de cerdo)
   * Cochinilla (colorante E120 de insectos)
-
-- SÍ PUEDEN CONSUMIR (derivados de animales VIVOS):
-  * TODOS los productos lácteos: leche, yogurt, queso, mantequilla, crema, nata
-  * TODOS los derivados lácteos: suero de leche, lactosa, caseína, caseinato, proteína de suero
-  * Huevos y derivados: clara de huevo, yema de huevo, lecitina de huevo
-  * Miel y productos de abejas
-
-- REGLA FUNDAMENTAL: Si el ingrediente proviene de un animal VIVO (sin dañarlo), ES APTO para vegetarianos
-- EJEMPLO CLAVE: "Suero de leche" = APTO para vegetariano (es un derivado lácteo)
-
-**VEGANO (vegano)**:
-Los veganos NO pueden consumir NINGÚN producto de origen animal, sin importar si el animal está vivo o muerto.
-
-- NO PUEDEN CONSUMIR (TODO lo de origen animal):
-  * Todo lo que los vegetarianos no pueden consumir (carnes, pescados, etc.)
-  * ADEMÁS: todos los productos lácteos (leche, queso, mantequilla, suero de leche, caseína, etc.)
-  * Huevos y derivados
-  * Miel y productos de abejas
   * Cualquier derivado animal aunque provenga de animales vivos
 
 - REGLA FUNDAMENTAL: Si contiene CUALQUIER ingrediente de origen animal (vivo o muerto), NO ES APTO para veganos
-- EJEMPLO CLAVE: "Suero de leche" = NO APTO para vegano (aunque provenga de animal vivo)
+- EJEMPLO CLAVE: "Suero de leche" = NO APTO para vegano (es derivado lácteo)
 
 **SIN GLUTEN (sin_gluten)**:
 - NO PUEDEN CONSUMIR: 
@@ -107,26 +92,26 @@ EJEMPLOS de cómo manejar información de alérgenos:
 EJEMPLOS ESPECÍFICOS PARA ACLARAR CONCEPTOS:
 
 1. Producto con "Suero de leche, Cacao, Azúcar":
-   - vegetariano: { "apto": true } - El suero de leche es un DERIVADO lácteo de animal vivo
    - vegano: { "apto": false, "razon": "Contiene suero de leche (derivado lácteo)" }
+   - sin_lactosa: { "apto": false, "razon": "Contiene suero de leche (contiene lactosa)" }
 
 2. Producto con "Caseína, Azúcar, Vainilla":
-   - vegetariano: { "apto": true } - La caseína es una proteína láctea de animal vivo
    - vegano: { "apto": false, "razon": "Contiene caseína (proteína láctea)" }
+   - sin_lactosa: { "apto": true }
 
-3. Producto con "Lecitina de huevo, Harina, Azúcar":
-   - vegetariano: { "apto": true } - La lecitina de huevo proviene de animal vivo
-   - vegano: { "apto": false, "razon": "Contiene lecitina de huevo" }
+3. Producto con "Harina de trigo, Azúcar, Sal":
+   - sin_gluten: { "apto": false, "razon": "Contiene harina de trigo" }
+   - vegano: { "apto": true }
 
-4. Producto con "Gelatina, Azúcar, Colorante":
-   - vegetariano: { "apto": false, "razon": "Contiene gelatina animal" } - La gelatina requiere muerte del animal
+4. Producto con "Aceite de almendra, Azúcar, Vainilla":
+   - sin_frutos_secos: { "apto": false, "razon": "Contiene aceite de almendra" }
+   - vegano: { "apto": true }
+
+5. Producto con "Gelatina, Azúcar, Colorante":
    - vegano: { "apto": false, "razon": "Contiene gelatina animal" }
+   - sin_gluten: { "apto": true }
 
-5. Producto con "Lactosa, Cacao, Azúcar":
-   - vegetariano: { "apto": true } - La lactosa es azúcar de la leche (derivado lácteo)
-   - vegano: { "apto": false, "razon": "Contiene lactosa (derivado lácteo)" }
-
-LISTA COMPLETA DE DERIVADOS LÁCTEOS APTOS PARA VEGETARIANOS (pero NO para veganos):
+LISTA COMPLETA DE DERIVADOS LÁCTEOS NO APTOS PARA VEGANOS:
 - Suero de leche, suero en polvo
 - Caseína, caseinato de sodio/calcio
 - Lactosa, galactosa
@@ -137,12 +122,12 @@ LISTA COMPLETA DE DERIVADOS LÁCTEOS APTOS PARA VEGETARIANOS (pero NO para vegan
 - Todos los tipos de queso y derivados
 
 CASOS ESPECIALES Y ACLARACIONES:
-- "Lecitina de soja" = APTO para vegetarianos y veganos (es vegetal)
-- "Lecitina de huevo" = APTO para vegetarianos, NO APTO para veganos
-- "Aceite vegetal" = APTO para vegetarianos y veganos
-- "Gelatina" (sin especificar) = ASUME que es animal, NO APTO para vegetarianos ni veganos
+- "Lecitina de soja" = APTO para veganos (es vegetal)
+- "Lecitina de huevo" = NO APTO para veganos
+- "Aceite vegetal" = APTO para veganos
+- "Gelatina" (sin especificar) = ASUME que es animal, NO APTO para veganos
 - "Vitamina D3" = Puede ser de origen animal, ser cauteloso
-- "Ácido láctico" = Generalmente vegetal, APTO para ambos (a menos que especifique origen animal)
+- "Ácido láctico" = Generalmente vegetal, APTO para veganos (a menos que especifique origen animal)
 
 Ejemplo de formato:
 ```json
@@ -150,9 +135,10 @@ Ejemplo de formato:
   "ingredientes": "agua, azúcar, jarabe de glucosa, colorante natural",
   "puede_contener": "SOJA Y DERIVADOS DE TRIGO",
   "clasificacion": {
-    "vegano": { "apto": false, "razon": "Contiene caseinato de sodio" },
-    "vegetariano": { "apto": true },
-    "celiaco": { "apto": true }
+    "vegano": { "apto": true },
+    "sin_gluten": { "apto": false, "razon": "Puede contener derivados de trigo" },
+    "sin_frutos_secos": { "apto": true },
+    "sin_lactosa": { "apto": true }
   }
 }
 """
