@@ -68,7 +68,7 @@ async def analizar_producto(
             status_code=400,
             detail=f"Tipo de imagen no soportado. Tipos permitidos: {', '.join([t.value for t in ImageType])}"
         )
-      # Analizar la imagen pasando los bytes directamente
+    # Analizar la imagen pasando los bytes directamente
     try:
         resultado = await analizar_imagen(image_data, restricciones=restricciones)
     except Exception as e:
@@ -77,6 +77,35 @@ async def analizar_producto(
             detail=f"Error al analizar la imagen: {str(e)}"
         )
     
+    # ✅ VERIFICAR SI HAY ERRORES ANTES DE GUARDAR
+    if "error" in resultado:
+        # Si hay error, devolver 422 (Unprocessable Entity) sin guardar en BD
+        error_type = resultado["error"]
+        error_message = resultado["message"]
+        
+        # Mapear códigos de error HTTP apropiados
+        error_status_codes = {
+            "invalid_image": 400,      # Bad Request - imagen no válida
+            "poor_quality": 400,       # Bad Request - imagen de mala calidad
+            "no_ingredients": 400,     # Bad Request - no se encontraron ingredientes
+            "low_confidence": 422,     # Unprocessable Entity - análisis con baja confianza
+            "api_error": 500,          # Internal Server Error - error del servicio
+            "timeout": 408,            # Request Timeout - timeout
+            "rate_limit": 429,         # Too Many Requests - límite de solicitudes
+        }
+        
+        status_code = error_status_codes.get(error_type, 422)
+        
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "error": error_type,
+                "message": error_message,
+                "instructions": get_error_instructions(error_type)
+            }
+        )
+    
+    # ✅ SOLO GUARDAR SI EL ANÁLISIS FUE EXITOSO
     # Crear el producto con la nueva estructura
     try:
         nuevo_producto = create_product(
@@ -97,3 +126,18 @@ async def analizar_producto(
         is_suitable=nuevo_producto.is_suitable,
         result_json=resultado
     )
+
+def get_error_instructions(error_type: str) -> str:
+    """
+    Devuelve instrucciones específicas para cada tipo de error.
+    """
+    instructions = {
+        "invalid_image": "Toma una foto de la etiqueta nutricional del producto, asegurándote de que muestre la lista de ingredientes.",
+        "poor_quality": "Mejora la calidad de la imagen: usa mejor iluminación, enfoque la cámara y mantén la imagen estable.",
+        "no_ingredients": "Asegúrate de que la foto muestre claramente la sección de ingredientes de la etiqueta.",
+        "low_confidence": "Toma una foto más clara de la etiqueta completa con mejor iluminación y enfoque.",
+        "api_error": "Error temporal del sistema. Intenta nuevamente en unos momentos.",
+        "timeout": "La imagen está tardando mucho en procesarse. Intenta con una imagen más clara y pequeña.",
+        "rate_limit": "Has realizado demasiadas solicitudes. Espera unos minutos antes de intentar nuevamente."
+    }
+    return instructions.get(error_type, "Intenta nuevamente con una imagen diferente.")
