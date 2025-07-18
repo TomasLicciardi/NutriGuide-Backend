@@ -190,7 +190,7 @@ Ejemplo de formato:
     "sin_frutos_secos": { "apto": true },
     "sin_lactosa": { "apto": true }
   },
-  "confidence": 0.85
+  "confidence": 0.90
 }
 """
 
@@ -270,7 +270,7 @@ def validar_confianza_diferencial(resultado: Dict, restricciones: List[str]) -> 
         umbral_requerido = CRITICAL_CONFIDENCE_THRESHOLD  # 90%
         tipo_restriccion = "crítica"
     else:
-        umbral_requerido = CONFIDENCE_THRESHOLD  # 85%
+        umbral_requerido = CONFIDENCE_THRESHOLD  # 90%
         tipo_restriccion = "normal"
     
     es_valido = confidence >= umbral_requerido

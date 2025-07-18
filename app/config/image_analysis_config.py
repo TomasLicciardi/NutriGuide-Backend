@@ -36,11 +36,11 @@ COMPRESSION_CONFIG = {
 
 # Configuración de validación cruzada
 VALIDATION_CONFIG = {
-    "confidence_threshold": 0.85,              # 85% confianza mínima (antes 70%)
+    "confidence_threshold": 0.90,              # 90% confianza mínima
     "minimum_confidence_for_critical": 0.90,   # 90% para restricciones críticas
-    "max_retries": 3,                          # 3 intentos (antes 2)
+    "max_retries": 3,                          # 3 intentos
     "retry_delay": 1.0,                        # Segundos entre intentos
-    "critical_restrictions": ["sin_gluten", "sin_frutos_secos"]  # Restricciones críticas
+    "critical_restrictions": ["sin_gluten", "sin_frutos_secos", "vegano", "sin lactosa"]  # Restricciones críticas
 }
 
 # Mensajes de error personalizables (SINCRONIZADOS CON FRONTEND)
