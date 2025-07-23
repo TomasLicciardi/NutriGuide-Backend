@@ -15,37 +15,42 @@ from app.schemas.auth_schemas import UserLogin, UserRegister, Token
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # --- Registro de usuario ---
-@router.post("/register", response_model=dict)
+@router.post("/register", response_model=Token)
 async def registrar_usuario(
     user_data: UserRegister,
     db: Session = Depends(get_db)
 ):
     """
-    Registra un nuevo usuario en la base de datos.
+    Registra un nuevo usuario en la base de datos y devuelve un token de acceso.
 
     Args:
         user_data (UserRegister): Datos del usuario validados por Pydantic.
         db (Session): Sesión de la base de datos.
 
     Returns:
-        dict: Mensaje de confirmación del registro.
+        Token: Token de acceso y tipo de token.
     """
     if get_user_by_email(db, user_data.email):
         raise HTTPException(status_code=409, detail="El correo ya está registrado.")
 
-    nuevo_usuario = create_user(db, {
+    # Preparar datos del usuario incluyendo restricciones
+    user_data_dict = {
         "username": user_data.username,
         "email": user_data.email,
         "password": hash_password(user_data.password),
-    })
-
-    # Establecer restricciones alimentarias si se proporcionan
+    }
+    
+    # Si hay restricciones, las incluimos en los datos iniciales
     if user_data.restrictions:
-        nuevo_usuario.set_restrictions(user_data.restrictions)
+        import json
+        user_data_dict["restrictions"] = json.dumps(user_data.restrictions)
+    
+    nuevo_usuario = create_user(db, user_data_dict)
 
-    db.commit()
+    # Generar token inmediatamente después del registro
+    token = create_access_token(data={"sub": str(nuevo_usuario.id)})
 
-    return {"mensaje": "Usuario registrado exitosamente."}
+    return Token(access_token=token, token_type="bearer")
 
 # --- Inicio de sesión (login) ---
 @router.post("/login", response_model=Token)
