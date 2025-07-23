@@ -228,7 +228,7 @@ def validar_respuesta_gemini(respuesta: str, restricciones: List[str] = None) ->
         )
         
         if not confianza_valida:
-            logger.warning(f"Confianza insuficiente: {mensaje_confianza}")
+            # logger.warning(f"Confianza insuficiente: {mensaje_confianza}")
             return False, resultado
         
         return True, resultado
@@ -278,7 +278,8 @@ def validar_confianza_diferencial(resultado: Dict, restricciones: List[str]) -> 
     mensaje = f"Confianza {confidence:.1%} ({'✅' if es_valido else '❌'}) - Umbral {tipo_restriccion}: {umbral_requerido:.1%}"
     
     if not es_valido:
-        logger.warning(f"Confianza insuficiente: {confidence:.2f} < {umbral_requerido:.2f} (restricción {tipo_restriccion})")
+        # logger.warning(f"Confianza insuficiente: {confidence:.2f} < {umbral_requerido:.2f} (restricción {tipo_restriccion})")
+        pass
     
     return es_valido, mensaje
 
@@ -290,7 +291,7 @@ async def validacion_cruzada_gemini(imagen, prompt: str, restricciones: List[str
     
     for i in range(max_intentos):
         try:
-            logger.info(f"Intento {i + 1} de análisis")
+            # logger.info(f"Intento {i + 1} de análisis")
             
             # Hacer la solicitud a Gemini
             respuesta = model.generate_content([prompt, imagen])
@@ -328,7 +329,7 @@ async def analizar_imagen(contenido: bytes, restricciones: list[str] | None = No
     """
     try:
         # 1. Analizar calidad de la imagen
-        logger.info("Analizando calidad de la imagen")
+        # logger.info("Analizando calidad de la imagen")
         calidad_info = analizar_calidad_imagen(contenido)
         
         if not calidad_info['es_valida']:
@@ -336,7 +337,7 @@ async def analizar_imagen(contenido: bytes, restricciones: list[str] | None = No
             return manejar_error_gemini("poor_quality", calidad_info['razon'])
         
         # 2. Comprimir imagen de manera inteligente
-        logger.info("Comprimiendo imagen de manera inteligente")
+        # logger.info("Comprimiendo imagen de manera inteligente")
         imagen = comprimir_imagen_inteligente(contenido, tipo_analisis="etiqueta_nutricional")
         
         # 3. Preparar el prompt según las restricciones
@@ -397,7 +398,7 @@ async def analizar_imagen(contenido: bytes, restricciones: list[str] | None = No
         prompt_completo += "\n\n**Solo evaluar estas restricciones:** " + ", ".join(restricciones) + "."
         prompt_completo += "\n\nINCLUYE un campo 'confidence' con el nivel de confianza del análisis (0.0 a 1.0)."
         
-        logger.info(f"Realizando análisis completo para restricciones: {restricciones}")
+        # logger.info(f"Realizando análisis completo para restricciones: {restricciones}")
         resultado = await validacion_cruzada_gemini(imagen, prompt_completo, restricciones)
         
         # 5. Limpiar resultado eliminando razones para productos aptos
