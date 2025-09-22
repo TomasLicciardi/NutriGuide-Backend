@@ -1,15 +1,26 @@
 # app/services/gemini_service.py
+"""
+Servicio Gemini unificado para NutriGuide
+- Extracción OCR de ingredientes
+- Clasificación con embeddings y RAG
+- Sistema híbrido local + Gemini
+"""
 
 import os
 import re
 import json
 import logging
+import io
+import asyncio
 import google.generativeai as genai
+from PIL import Image
 from app.utils.image_tools import comprimir_imagen_inteligente, analizar_calidad_imagen
 from app.config.image_analysis_config import VALIDATION_CONFIG, ERROR_MESSAGES
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Tuple
 import time
+from sqlalchemy.orm import Session
+from app.services.rag_service import rag_service
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -19,408 +30,485 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-2.0-flash-lite")
 
-# Configuración para validación cruzada (desde config)
-CONFIDENCE_THRESHOLD = VALIDATION_CONFIG["confidence_threshold"]
-CRITICAL_CONFIDENCE_THRESHOLD = VALIDATION_CONFIG["minimum_confidence_for_critical"]
-MAX_RETRIES = VALIDATION_CONFIG["max_retries"]
-RETRY_DELAY = VALIDATION_CONFIG["retry_delay"]
-CRITICAL_RESTRICTIONS = VALIDATION_CONFIG["critical_restrictions"]
-
-BASE_PROMPT = """
-Analiza la imagen de una etiqueta de producto alimenticio de forma precisa y estructurada. 
-
-IMPORTANTE: Antes de realizar cualquier análisis, VERIFICA que la imagen sea de una etiqueta nutricional o de ingredientes de un producto alimenticio. Si la imagen NO es una etiqueta nutricional válida, devuelve el siguiente JSON:
-
-```json
-{
-  "error": "invalid_image",
-  "message": "La imagen no corresponde a una etiqueta nutricional válida. Por favor, tome una foto clara de la etiqueta de ingredientes del producto.",
-  "confidence": 0.0
-}
-```
-
-Si la imagen es borrosa, oscura o no se puede leer claramente, devuelve:
-
-```json
-{
-  "error": "poor_quality",
-  "message": "La imagen está borrosa o es difícil de leer. Por favor, tome una foto más clara con mejor iluminación.",
-  "confidence": 0.0
-}
-```
-
-Si NO puedes encontrar una sección de "Ingredientes" o información de alérgenos, devuelve:
-
-```json
-{
-  "error": "no_ingredients",
-  "message": "No se puede identificar la lista de ingredientes en la imagen. Por favor, tome una foto que muestre claramente la sección de ingredientes.",
-  "confidence": 0.0
-}
-```
-
-Si la imagen es válida y legible, sigue estas instrucciones exactamente:
-
-1. Extrae la lista de ingredientes y escribe todos los ingredientes encontrados en una única línea, separados por comas. No incluyas encabezados como "Ingredientes:", ni puntos, ni información adicional.
-
-2. Para la información de alérgenos:
-   - Busca CUALQUIER sección que mencione alérgenos o trazas, como: "PUEDE CONTENER", "CONTIENE", "CONTIENE TRAZAS", "PUEDE CONTENER TRAZAS", etc.
-   - Si encuentras CUALQUIERA de estas secciones, copia literalmente todo su contenido después del título.
-   - IMPORTANTE: Tanto "CONTIENE" como "PUEDE CONTENER" deben tratarse exactamente igual - ambos indican información de alérgenos importante.
-   - Solo devuelve null si NO existe ninguna sección de información de alérgenos en toda la etiqueta.
-   - Si hay información de alérgenos, siempre inclúyela sin importar si dice "CONTIENE" o "PUEDE CONTENER".
-
-3. Evalúa si el producto contiene ingredientes NO APTOS para ciertas restricciones alimenticias.
-
-4. CALCULA un nivel de confianza (0.0 a 1.0) basado en:
-   - Claridad del texto: 0.4 puntos máximo
-   - Completitud de la información: 0.3 puntos máximo
-   - Certeza en la clasificación: 0.3 puntos máximo
-
-DEFINICIONES CRÍTICAS - LEE CUIDADOSAMENTE:
-
-**VEGANO (vegano)**:
-Los veganos NO pueden consumir NINGÚN producto de origen animal, sin importar si el animal está vivo o muerto.
-
-- NO PUEDEN CONSUMIR (TODO lo de origen animal):
-  * Carne de cualquier tipo (res, cerdo, cordero, etc.)
-  * Aves (pollo, pavo, pato, etc.)
-  * Pescados y mariscos (salmón, atún, camarones, etc.)
-  * Productos lácteos (leche, queso, mantequilla, suero de leche, caseína, etc.)
-  * Huevos y derivados (clara de huevo, yema de huevo, lecitina de huevo)
-  * Miel y productos de abejas
-  * Gelatina animal (obtenida de huesos y cartílagos)
-  * Renina animal (enzima del estómago de terneros)
-  * Extractos de carne o pescado
-  * Grasa animal (sebo, manteca de cerdo)
-  * Cochinilla (colorante E120 de insectos)
-  * Cualquier derivado animal aunque provenga de animales vivos
-
-- REGLA FUNDAMENTAL: Si contiene CUALQUIER ingrediente de origen animal (vivo o muerto), NO ES APTO para veganos
-- EJEMPLO CLAVE: "Suero de leche" = NO APTO para vegano (es derivado lácteo)
-
-**SIN GLUTEN (sin_gluten)**:
-- NO PUEDEN CONSUMIR: 
-  * Trigo y derivados (harina de trigo, gluten, sémola, bulgur)
-  * Cebada y derivados (malta, extracto de malta, jarabe de malta)
-  * Centeno y derivados
-  * Avena (a menos que especifique "sin gluten" o "libre de gluten")
-  * Triticale (híbrido de trigo y centeno)
-  * Espelta, kamut, farro
-  * Almidón modificado (si no especifica origen)
-
-**SIN FRUTOS SECOS (sin_frutos_secos)**:
-- NO PUEDEN CONSUMIR:
-  * Frutos secos del árbol: almendras, nueces, avellanas, pistachos, anacardos, pecanas, macadamias, nueces de Brasil, piñones
-  * Aceites de frutos secos
-  * Harinas de frutos secos
-  * Mantequillas de frutos secos (mantequilla de almendra, etc.)
-  * NOTA: Los cacahuetes NO son frutos secos (son legumbres), pero pueden estar en restricciones personalizadas
-
-**SIN LACTOSA (sin_lactosa)**:
-- NO PUEDEN CONSUMIR:
-  * Leche y derivados lácteos que contengan lactosa
-  * Productos que contengan "lactosa" como ingrediente
-  * NOTA: Algunos quesos maduros y productos "sin lactosa" SÍ son aptos
-
-- Si el usuario proporciona una lista personalizada de restricciones, analiza **únicamente** esas.
-- Si la lista está vacía, evalúa **todas** las restricciones predeterminadas.
-
-Para cada restricción evaluada:
-- Usa `"apto": true` si es apto.
-- Usa `"apto": false` y proporciona una clave `"razon"` con una justificación **clara y breve** basada en los ingredientes.
-- Si es apto, **NO** incluyas la clave `"razon"`.
-
-Devuelve el resultado **en un único bloque de código JSON**, encerrado entre ```json y ```.
-
-EJEMPLOS de cómo manejar información de alérgenos:
-- Si ve "PUEDE CONTENER: Gluten, Soja" → "puede_contener": "Gluten, Soja"
-- Si ve "CONTIENE: Leche, Huevo" → "puede_contener": "Leche, Huevo"
-- Si ve "CONTIENE TRAZAS DE: Frutos secos" → "puede_contener": "Frutos secos"
-- Si NO hay ninguna sección de alérgenos → "puede_contener": null
-
-EJEMPLOS ESPECÍFICOS PARA ACLARAR CONCEPTOS:
-
-1. Producto con "Suero de leche, Cacao, Azúcar":
-   - vegano: { "apto": false, "razon": "Contiene suero de leche (derivado lácteo)" }
-   - sin_lactosa: { "apto": false, "razon": "Contiene suero de leche (contiene lactosa)" }
-
-2. Producto con "Caseína, Azúcar, Vainilla":
-   - vegano: { "apto": false, "razon": "Contiene caseína (proteína láctea)" }
-   - sin_lactosa: { "apto": true }
-
-3. Producto con "Harina de trigo, Azúcar, Sal":
-   - sin_gluten: { "apto": false, "razon": "Contiene harina de trigo" }
-   - vegano: { "apto": true }
-
-4. Producto con "Aceite de almendra, Azúcar, Vainilla":
-   - sin_frutos_secos: { "apto": false, "razon": "Contiene aceite de almendra" }
-   - vegano: { "apto": true }
-
-5. Producto con "Gelatina, Azúcar, Colorante":
-   - vegano: { "apto": false, "razon": "Contiene gelatina animal" }
-   - sin_gluten: { "apto": true }
-
-LISTA COMPLETA DE DERIVADOS LÁCTEOS NO APTOS PARA VEGANOS:
-- Suero de leche, suero en polvo
-- Caseína, caseinato de sodio/calcio
-- Lactosa, galactosa
-- Proteína de suero (whey protein)
-- Lactoalbúmina, lactoglobulina
-- Mantequilla, butter oil
-- Crema, nata, cream
-- Todos los tipos de queso y derivados
-
-CASOS ESPECIALES Y ACLARACIONES:
-- "Lecitina de soja" = APTO para veganos (es vegetal)
-- "Lecitina de huevo" = NO APTO para veganos
-- "Aceite vegetal" = APTO para veganos
-- "Gelatina" (sin especificar) = ASUME que es animal, NO APTO para veganos
-- "Vitamina D3" = Puede ser de origen animal, ser cauteloso
-- "Ácido láctico" = Generalmente vegetal, APTO para veganos (a menos que especifique origen animal)
-
-Ejemplo de formato:
-```json
-{
-  "ingredientes": "agua, azúcar, jarabe de glucosa, colorante natural",
-  "puede_contener": "SOJA Y DERIVADOS DE TRIGO",
-  "clasificacion": {
-    "vegano": { "apto": true },
-    "sin_gluten": { "apto": false, "razon": "Puede contener derivados de trigo" },
-    "sin_frutos_secos": { "apto": true },
-    "sin_lactosa": { "apto": true }
-  },
-  "confidence": 0.90
-}
-"""
-
-# Funciones auxiliares para validación y manejo de errores
-def validar_respuesta_gemini(respuesta: str, restricciones: List[str] = None) -> Tuple[bool, Optional[Dict]]:
-    """
-    Valida la respuesta de Gemini y extrae el JSON.
-    Retorna (es_valida, resultado_json)
-    """
-    try:
-        # Buscar el JSON en la respuesta
-        m = re.search(r"```json\n(.*?)```", respuesta, re.DOTALL)
-        if not m:
-            logger.warning("No se encontró JSON en la respuesta de Gemini")
-            return False, None
-        
-        resultado = json.loads(m.group(1))
-        
-        # Verificar si es un error de validación
-        if "error" in resultado:
-            return False, resultado
-        
-        # Verificar estructura básica
-        if "ingredientes" not in resultado:
-            logger.warning("Respuesta sin ingredientes")
-            return False, None
-        
-        # Verificar confianza si existe
-        confidence = resultado.get('confidence', 0.5)
-        
-        # Validar confianza diferencial
-        restricciones_para_validar = restricciones if restricciones else []
-        confianza_valida, mensaje_confianza = validar_confianza_diferencial(
-            resultado, restricciones_para_validar
-        )
-        
-        if not confianza_valida:
-            # logger.warning(f"Confianza insuficiente: {mensaje_confianza}")
-            return False, resultado
-        
-        return True, resultado
+class GeminiService:
+    def __init__(self):
+        self.supported_restrictions = [
+            "vegano", "vegetariano", "sin_gluten", "sin_lactosa", "sin_frutos_secos"
+        ]
     
-    except json.JSONDecodeError as e:
-        logger.error(f"Error al parsear JSON: {e}")
-        return False, None
-    except Exception as e:
-        logger.error(f"Error inesperado validando respuesta: {e}")
-        return False, None
-
-def manejar_error_gemini(error_type: str, mensaje: str = None) -> Dict:
-    """
-    Maneja diferentes tipos de errores de Gemini de forma estructurada.
-    """
-    return {
-        "error": error_type,
-        "message": mensaje or ERROR_MESSAGES.get(error_type, "Error desconocido"),
-        "confidence": 0.0,
-        "ingredientes": None,
-        "puede_contener": None,
-        "clasificacion": {}
-    }
-
-def validar_confianza_diferencial(resultado: Dict, restricciones: List[str]) -> Tuple[bool, str]:
-    """
-    Valida confianza con diferentes umbrales según criticidad de restricciones.
-    Restricciones críticas (alergias severas) requieren mayor confianza.
-    """
-    confidence = resultado.get('confidence', 0.0)
-    
-    # Verificar si hay restricciones críticas
-    tiene_restriccion_critica = any(
-        restriccion in CRITICAL_RESTRICTIONS 
-        for restriccion in restricciones
-    )
-    
-    if tiene_restriccion_critica:
-        umbral_requerido = CRITICAL_CONFIDENCE_THRESHOLD  # 90%
-        tipo_restriccion = "crítica"
-    else:
-        umbral_requerido = CONFIDENCE_THRESHOLD  # 90%
-        tipo_restriccion = "normal"
-    
-    es_valido = confidence >= umbral_requerido
-    
-    mensaje = f"Confianza {confidence:.1%} ({'✅' if es_valido else '❌'}) - Umbral {tipo_restriccion}: {umbral_requerido:.1%}"
-    
-    if not es_valido:
-        # logger.warning(f"Confianza insuficiente: {confidence:.2f} < {umbral_requerido:.2f} (restricción {tipo_restriccion})")
-        pass
-    
-    return es_valido, mensaje
-
-async def validacion_cruzada_gemini(imagen, prompt: str, restricciones: List[str] = None, max_intentos: int = 3) -> Dict:
-    """
-    Realiza validación cruzada con múltiples intentos para mejorar la precisión.
-    """
-    intentos = []
-    
-    for i in range(max_intentos):
+    async def extract_ingredients_ocr(self, image_content: bytes, image_type: str) -> Dict:
+        """
+        PRIMERA PETICIÓN A GEMINI: Extracción de ingredientes (OCR)
+        """
         try:
-            # logger.info(f"Intento {i + 1} de análisis")
+            logger.info("🔍 Iniciando extracción OCR de ingredientes con Gemini")
             
-            # Hacer la solicitud a Gemini
-            respuesta = model.generate_content([prompt, imagen])
+            # 1. Validar calidad de imagen
+            logger.info("Validando calidad de imagen...")
+            calidad_resultado = analizar_calidad_imagen(image_content)
+            if not calidad_resultado["es_valida"]:
+                return self._create_error_response("poor_quality", calidad_resultado["mensaje"])
             
-            # Validar la respuesta
-            es_valida, resultado = validar_respuesta_gemini(respuesta.text, restricciones)
+            # 2. Comprimir imagen
+            logger.info("Comprimiendo imagen...")
+            imagen_pil = comprimir_imagen_inteligente(image_content, image_type)
+            if not imagen_pil:
+                return self._create_error_response("compression_failed", "No se pudo procesar la imagen")
             
-            if es_valida:
-                resultado['intentos_realizados'] = i + 1
-                logger.info(f"Análisis exitoso en intento {i + 1}")
-                return resultado
+            # 3. Convertir PIL a bytes para Gemini (optimizado)
+            logger.info("Convirtiendo imagen a bytes...")
+            imagen_buffer = io.BytesIO()
+            imagen_pil.save(imagen_buffer, format='JPEG', quality=60, optimize=True)
+            imagen_bytes = imagen_buffer.getvalue()
             
-            # Si hay error específico, retornarlo inmediatamente
-            if resultado and "error" in resultado:
-                return resultado
+            # Si la imagen es muy grande, reducir más
+            if len(imagen_bytes) > 50000:  # 50KB
+                imagen_buffer = io.BytesIO()
+                if max(imagen_pil.size) > 600:
+                    imagen_pil.thumbnail((600, 600), Image.Resampling.LANCZOS)
+                imagen_pil.save(imagen_buffer, format='JPEG', quality=50, optimize=True)
+                imagen_bytes = imagen_buffer.getvalue()
             
-            intentos.append(resultado)
+            logger.info(f"Imagen procesada, tamaño: {len(imagen_bytes)} bytes")
             
-            # Esperar antes del siguiente intento
-            if i < max_intentos - 1:
-                time.sleep(RETRY_DELAY)
+            # 4. Construir prompt OCR
+            prompt = self._get_ocr_prompt()
+            
+            # 5. Enviar a Gemini con manejo de errores
+            logger.info("🤖 Enviando request a Gemini OCR...")
+            
+            max_retries = 2
+            timeouts = [10, 20]  # Timeouts progresivos
+            
+            for attempt in range(max_retries):
+                try:
+                    timeout = timeouts[attempt]
+                    logger.info(f"Intento {attempt + 1}/{max_retries} con timeout de {timeout}s")
+                    
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            model.generate_content,
+                            [prompt, {"mime_type": "image/jpeg", "data": imagen_bytes}]
+                        ),
+                        timeout=timeout
+                    )
+                    logger.info("✅ Respuesta OCR recibida de Gemini")
+                    break
+                    
+                except asyncio.TimeoutError:
+                    logger.error(f"❌ TIMEOUT DE GEMINI en intento {attempt + 1}/{max_retries} - {timeout}s")
+                    if attempt == max_retries - 1:
+                        return self._create_error_response("timeout", "Timeout en extracción de ingredientes")
+                    
+                except Exception as gemini_error:
+                    logger.error(f"❌ ERROR DE GEMINI en intento {attempt + 1}: {type(gemini_error).__name__}: {gemini_error}")
+                    if attempt == max_retries - 1:
+                        return self._create_error_response("api_error", f"Error en API de Gemini: {str(gemini_error)}")
+            
+            # 6. Parsear respuesta
+            logger.info("Parseando respuesta OCR...")
+            result = self._parse_ocr_response(response.text)
+            
+            if not result.get("success"):
+                logger.error("❌ FALLO EL PARSING DE GEMINI")
+                logger.error(f"Respuesta de Gemini: {response.text[:500]}...")
+                return self._create_error_response("parse_failed", "No se pudo interpretar la respuesta de Gemini")
+            
+            logger.info(f"✅ OCR exitoso: {len(result.get('ingredients', []))} ingredientes detectados")
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ ERROR GENERAL EN EXTRACCIÓN OCR: {type(e).__name__}: {e}")
+            return self._create_error_response("general_error", f"Error general en OCR: {str(e)}")
+    
+    async def classify_ingredients_with_embeddings_and_rag(self, ingredients: List[str], allergen_warnings: str, db: Session) -> Dict:
+        """
+        FLUJO PRINCIPAL DE CLASIFICACIÓN:
+        1. Usar embeddings DB para clasificar cada ingrediente (BASE/ADITIVO)
+        2. Solo ingredientes BASE → SEGUNDA PETICIÓN a Gemini con RAG
+        3. Combinar resultados y devolver clasificación final
+        """
+        try:
+            logger.info(f"🔍 Iniciando clasificación de {len(ingredients)} ingredientes")
+            
+            # PASO 1: Clasificar cada ingrediente individualmente
+            classified_ingredients = []
+            base_ingredients = []
+            
+            from app.services.embedding_service import EmbeddingService
+            embedding_service = EmbeddingService()
+            
+            for ingredient_name in ingredients:
+                ingredient_data = await self._classify_ingredient_by_embeddings(
+                    ingredient_name, db, embedding_service
+                )
+                classified_ingredients.append(ingredient_data)
+                
+                if ingredient_data["type"] == "BASE":
+                    base_ingredients.append(ingredient_data)
+            
+            logger.info(f"✅ Clasificados: {len(classified_ingredients)} total, {len(base_ingredients)} BASE")
+            
+            # PASO 2: Solo ingredientes BASE → RAG + SEGUNDA PETICIÓN A GEMINI
+            if base_ingredients:
+                logger.info("🤖 Clasificando ingredientes BASE con Gemini + RAG...")
+                base_names = [ing["name"] for ing in base_ingredients]
+                
+                # Obtener contexto RAG
+                rag_context = await rag_service.get_classification_context(base_names, db)
+                
+                # SEGUNDA PETICIÓN A GEMINI
+                final_classification = await self._classify_base_ingredients_with_rag(
+                    base_names, allergen_warnings, rag_context
+                )
+                
+                if final_classification.get("success"):
+                    logger.info("✅ Clasificación RAG exitosa")
+                    result = final_classification
+                else:
+                    logger.warning("⚠️ Fallo Gemini RAG, usando clasificación local")
+                    result = self._classify_local_fast(base_names, allergen_warnings)
+            else:
+                logger.info("ℹ️ No hay ingredientes BASE, clasificación básica")
+                result = self._classify_additives_only(allergen_warnings)
+            
+            # PASO 3: Agregar metadata
+            result["classified_ingredients"] = classified_ingredients
+            result["base_ingredients_count"] = len(base_ingredients)
+            result["total_ingredients_count"] = len(classified_ingredients)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error en clasificación: {e}")
+            # Fallback a clasificación local básica
+            return self._classify_local_fast(ingredients, allergen_warnings)
+    
+    async def _classify_ingredient_by_embeddings(self, ingredient_name: str, db: Session, embedding_service) -> Dict:
+        """
+        Clasifica un ingrediente usando embeddings de la DB
+        """
+        try:
+            from app.models.ingredient import Ingredient, IngredientType
+            from sqlalchemy import func
+            
+            # Buscar ingredientes similares en DB
+            similar_ingredient = db.query(Ingredient).filter(
+                func.lower(Ingredient.name).contains(ingredient_name.lower())
+            ).first()
+            
+            if similar_ingredient:
+                logger.info(f"✅ Encontrado en DB: {ingredient_name} → {similar_ingredient.type.value}")
+                return {
+                    "name": ingredient_name,
+                    "type": similar_ingredient.type.value,
+                    "confidence": 0.9,
+                    "source": "database"
+                }
+            else:
+                # Clasificación heurística si no está en DB
+                is_additive = any(keyword in ingredient_name.lower() for keyword in 
+                                 ['emulsificante', 'emulsionante', 'aromatizante', 'colorante', 
+                                  'vitamina', 'mineral', 'lecitina', 'estabilizante', 'conservante',
+                                  'antioxidante', 'edulcorante', 'espesante'])
+                
+                ingredient_type = "ADITIVO" if is_additive else "BASE"
+                
+                # Guardar en DB para futuras consultas
+                embedding = await embedding_service.generate_embedding(ingredient_name)
+                
+                new_ingredient = Ingredient(
+                    name=ingredient_name.lower().strip(),
+                    original_name=ingredient_name,
+                    type=IngredientType.ADITIVO if is_additive else IngredientType.BASE,
+                    embedding=str(embedding) if embedding else None,
+                    confidence=0.8
+                )
+                db.add(new_ingredient)
+                db.flush()
+                
+                logger.info(f"💾 Nuevo ingrediente: {ingredient_name} → {ingredient_type}")
+                
+                return {
+                    "name": ingredient_name,
+                    "type": ingredient_type,
+                    "confidence": 0.8,
+                    "source": "heuristic"
+                }
                 
         except Exception as e:
-            logger.error(f"Error en intento {i + 1}: {str(e)}")
-            if i == max_intentos - 1:
-                return manejar_error_gemini("api_error", f"Error del servicio: {str(e)}")
-            time.sleep(RETRY_DELAY)
+            logger.error(f"❌ Error clasificando {ingredient_name}: {e}")
+            return {
+                "name": ingredient_name,
+                "type": "BASE",  # Asumir BASE por seguridad
+                "confidence": 0.5,
+                "source": "fallback"
+            }
     
-    # Si llegamos aquí, todos los intentos fallaron
-    return manejar_error_gemini("api_error", "No se pudo procesar la imagen después de múltiples intentos")
-
-async def analizar_imagen(contenido: bytes, restricciones: list[str] | None = None):
-    """
-    Analiza una imagen de etiqueta nutricional con validación avanzada y manejo de errores.
-    """
-    try:
-        # 1. Analizar calidad de la imagen
-        # logger.info("Analizando calidad de la imagen")
-        calidad_info = analizar_calidad_imagen(contenido)
-        
-        if not calidad_info['es_valida']:
-            logger.warning(f"Imagen rechazada por calidad: {calidad_info['razon']}")
-            return manejar_error_gemini("poor_quality", calidad_info['razon'])
-        
-        # 2. Comprimir imagen de manera inteligente
-        # logger.info("Comprimiendo imagen de manera inteligente")
-        imagen = comprimir_imagen_inteligente(contenido, tipo_analisis="etiqueta_nutricional")
-        
-        # 3. Preparar el prompt según las restricciones
-        if not restricciones or len(restricciones) == 0:
-            # Prompt simplificado para análisis básico
-            prompt_simple = """
-            Analiza la imagen de una etiqueta de producto alimenticio y extrae únicamente la información básica.
-
-            IMPORTANTE: Antes de realizar cualquier análisis, VERIFICA que la imagen sea de una etiqueta nutricional válida. Si NO es una etiqueta nutricional, devuelve error "invalid_image".
-
-            Si la imagen es borrosa o no se puede leer claramente, devuelve error "poor_quality".
-
-            Si NO puedes encontrar una sección de "Ingredientes", devuelve error "no_ingredients".
-
-            Si la imagen es válida y legible, sigue estas instrucciones:
-
-            1. Extrae la lista de ingredientes y escribe todos los ingredientes encontrados en una única línea, separados por comas.
+    async def _classify_base_ingredients_with_rag(self, base_ingredients: List[str], allergen_warnings: str, rag_context: str) -> Dict:
+        """
+        SEGUNDA PETICIÓN A GEMINI: Clasificar ingredientes BASE con contexto RAG
+        """
+        try:
+            logger.info(f"🤖 Segunda petición Gemini: {len(base_ingredients)} ingredientes BASE")
             
-            2. Para la información de alérgenos:
-               - Busca CUALQUIER sección que mencione alérgenos o trazas
-               - Si encuentras información de alérgenos, inclúyela
-               - Si NO hay información de alérgenos, devuelve null
+            prompt = self._get_rag_classification_prompt(base_ingredients, allergen_warnings, rag_context)
+            
+            response = await asyncio.wait_for(
+                asyncio.to_thread(model.generate_content, prompt),
+                timeout=25  # Timeout más largo para RAG
+            )
+            
+            result = self._parse_classification_response(response.text)
+            if result.get("success"):
+                logger.info("✅ Clasificación RAG completada")
+            return result
+            
+        except asyncio.TimeoutError:
+            logger.error("❌ Timeout en clasificación RAG")
+            return {"success": False, "error": "timeout"}
+        except Exception as e:
+            logger.error(f"❌ Error en clasificación RAG: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _get_ocr_prompt(self) -> str:
+        """
+        Prompt para extracción OCR de ingredientes
+        """
+        return """
+Extrae la información de esta etiqueta de producto alimenticio:
 
-            3. Calcula un nivel de confianza (0.0 a 1.0) basado en la claridad del texto.
+1. INGREDIENTES: Lista completa de ingredientes en orden
+2. ADVERTENCIAS: Texto de "CONTIENE", "PUEDE CONTENER", etc.
 
-            Devuelve el resultado en formato JSON:
-            ```json
-            {
-              "ingredientes": "lista de ingredientes",
-              "puede_contener": "información de alérgenos o null",
-              "clasificacion": {},
-              "confidence": 0.85
+IMPORTANTE: 
+- Separa cada ingrediente individualmente
+- Incluye todas las advertencias de alérgenos
+- Mantén los nombres originales de ingredientes
+
+Responde en JSON:
+{
+  "ingredientes_detectados": ["ingrediente1", "ingrediente2", "ingrediente3"],
+  "alerenos_advertencias": "texto completo de advertencias o null",
+  "confidence": 0.95
+}
+"""
+    
+    def _get_rag_classification_prompt(self, base_ingredients: List[str], allergen_warnings: str, rag_context: str) -> str:
+        """
+        Prompt para clasificación RAG de ingredientes BASE
+        """
+        ingredients_text = ", ".join(base_ingredients)
+        allergen_text = allergen_warnings if allergen_warnings else "Sin advertencias"
+        
+        return f"""
+Clasifica estos INGREDIENTES BASE para restricciones dietéticas usando el contexto RAG.
+
+INGREDIENTES BASE: {ingredients_text}
+ADVERTENCIAS: {allergen_text}
+
+CONTEXTO RAG:
+{rag_context}
+
+EVALÚA CADA RESTRICCIÓN:
+- vegano: ¿Sin productos animales? (leche, huevo, carne, miel)
+- vegetariano: ¿Sin carne/pescado? (lácteos OK)  
+- sin_gluten: ¿Sin gluten/trigo?
+- sin_lactosa: ¿Sin lácteos?
+- sin_frutos_secos: ¿Sin frutos secos?
+
+INSTRUCCIONES CRÍTICAS:
+- CONSISTENCIA: Si dices "apto": true, la razón debe ser positiva o null
+- CONSISTENCIA: Si dices "apto": false, la razón debe mencionar el ingrediente problemático
+- Si es APTO: razon puede ser null o "Sin [problema] detectado" 
+- Si NO es APTO: razon debe ser "Contiene [ingrediente específico]"
+- NO hagas listas de ingredientes
+- SÉ DIRECTO Y PRECISO
+
+EJEMPLOS CORRECTOS:
+- vegano APTO: {{"apto": true, "razon": null}} 
+- vegano NO APTO: {{"apto": false, "razon": "Contiene leche"}}
+- gluten APTO: {{"apto": true, "razon": null}}
+- gluten NO APTO: {{"apto": false, "razon": "Contiene trigo"}}
+
+JSON RESPUESTA:
+{{
+  "vegano": {{"apto": true/false, "razon": null o "Contiene [ingrediente]"}},
+  "vegetariano": {{"apto": true/false, "razon": null o "Contiene [ingrediente]"}},
+  "sin_gluten": {{"apto": true/false, "razon": null o "Contiene [ingrediente]"}},
+  "sin_lactosa": {{"apto": true/false, "razon": null o "Contiene [ingrediente]"}},
+  "sin_frutos_secos": {{"apto": true/false, "razon": null o "Contiene [ingrediente]"}},
+  "confidence": 0.95
+}}
+"""
+    
+    def _parse_ocr_response(self, response_text: str) -> Dict:
+        """
+        Parsea respuesta OCR de Gemini
+        """
+        try:
+            # Buscar JSON en la respuesta
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(1))
+            else:
+                result = json.loads(response_text)
+            
+            # Validar estructura
+            if not isinstance(result.get("ingredientes_detectados"), list):
+                raise ValueError("ingredientes_detectados debe ser una lista")
+            
+            return {
+                "success": True,
+                "ingredients": result["ingredientes_detectados"],
+                "allergen_warnings": result.get("alerenos_advertencias"),
+                "confidence": result.get("confidence", 0.5)
             }
-            ```
-
-            Para errores, usa este formato:
-            ```json
-            {
-              "error": "tipo_error",
-              "message": "mensaje descriptivo",
-              "confidence": 0.0
+            
+        except Exception as e:
+            logger.error(f"Error parseando OCR: {e}")
+            return {"success": False, "error": "parse_failed"}
+    
+    def _parse_classification_response(self, response_text: str) -> Dict:
+        """
+        Parsea respuesta de clasificación RAG
+        """
+        try:
+            logger.info(f"🔍 Parseando respuesta de Gemini: {response_text[:200]}...")
+            
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(1))
+            else:
+                result = json.loads(response_text)
+            
+            logger.info(f"✅ JSON parseado exitosamente: {result}")
+            
+            # Normalizar estructura - mapea "razon" a "motivo"
+            restrictions = {}
+            for restriction in self.supported_restrictions:
+                if restriction in result:
+                    # Tomar razon del resultado y mapear a motivo
+                    motivo = result[restriction].get("razon", "Sin motivo especificado")
+                    apto = bool(result[restriction].get("apto", False))
+                    
+                    # Validar que motivo no sea None antes de procesar
+                    if motivo is None:
+                        motivo = None
+                    elif isinstance(motivo, str):
+                        # Lógica de motivos corregida:
+                        if apto:
+                            # Si es APTO y dice "sin X detectado" → motivo = null
+                            if any(phrase in motivo.lower() for phrase in ["sin", "detectado", "no contiene"]):
+                                motivo = None
+                        else:
+                            # Si NO es APTO pero dice "sin X detectado" → contradicción, corregir
+                            if any(phrase in motivo.lower() for phrase in ["sin", "detectado", "no contiene"]):
+                                # Cambiar a apto = True ya que no hay problema detectado
+                                apto = True
+                                motivo = None
+                    else:
+                        motivo = None  # Fallback si motivo no es string ni None
+                    
+                    restrictions[restriction] = {
+                        "apto": apto,
+                        "motivo": motivo
+                    }
+                else:
+                    restrictions[restriction] = {"apto": True, "motivo": None}
+            
+            return {
+                "success": True,
+                "restrictions": restrictions,
+                "confidence": result.get("confidence", 0.5)
             }
-            ```
-            """
             
-            # Realizar análisis con validación cruzada
-            logger.info("Realizando análisis básico con validación cruzada")
-            resultado = await validacion_cruzada_gemini(imagen, prompt_simple, restricciones=[])
-            
-            # Asegurar que clasificación esté vacía para usuarios sin restricciones
-            if "clasificacion" not in resultado:
-                resultado['clasificacion'] = {}
-            
-            return resultado
+        except Exception as e:
+            logger.error(f"Error parseando clasificación: {e}")
+            return {"success": False, "error": "parse_failed"}
+    
+    def _classify_local_fast(self, ingredients: List[str], allergen_warnings: str) -> Dict:
+        """
+        Clasificación local rápida y precisa (fallback)
+        """
+        all_text = " ".join(ingredients).lower() + " " + (allergen_warnings or "").lower()
         
-        # 4. Análisis completo con restricciones
-        prompt_completo = BASE_PROMPT
-        prompt_completo += "\n\n**Solo evaluar estas restricciones:** " + ", ".join(restricciones) + "."
-        prompt_completo += "\n\nINCLUYE un campo 'confidence' con el nivel de confianza del análisis (0.0 a 1.0)."
+        # Buscar productos animales
+        animal_products = ["huevo", "leche", "carne", "pollo", "pescado", "miel", "gelatina", 
+                          "caseinato", "suero", "lactosa", "queso", "mantequilla", "yogur"]
+        vegano_blocked = any(product in all_text for product in animal_products)
         
-        # logger.info(f"Realizando análisis completo para restricciones: {restricciones}")
-        resultado = await validacion_cruzada_gemini(imagen, prompt_completo, restricciones)
+        # Solo carne y pescado para vegetarianos
+        meat_fish = ["carne", "pollo", "pescado", "cerdo", "res", "cordero", "atún", "salmón"]
+        vegetariano_blocked = any(meat in all_text for meat in meat_fish)
         
-        # 5. Limpiar resultado eliminando razones para productos aptos
-        if "clasificacion" in resultado:
-            clasificacion = resultado['clasificacion']
-            for restriccion in clasificacion:
-                if clasificacion[restriccion].get('apto', True):
-                    clasificacion[restriccion] = {'apto': True}
+        # Gluten
+        gluten_sources = ["trigo", "cebada", "centeno", "avena", "gluten", "malta", "sémola"]
+        gluten_blocked = any(source in all_text for source in gluten_sources)
         
-        # 6. Validar confianza diferencial según restricciones críticas
-        restricciones_eval = restricciones if restricciones else []
-        es_confianza_valida, mensaje_confianza = validar_confianza_diferencial(resultado, restricciones_eval)
+        # Lácteos
+        dairy_products = ["leche", "lactosa", "queso", "mantequilla", "yogur", "suero", "caseinato"]
+        lactosa_blocked = any(dairy in all_text for dairy in dairy_products)
         
-        if not es_confianza_valida:
-            return manejar_error_gemini("low_confidence", mensaje_confianza)
+        # Frutos secos
+        nuts = ["almendra", "nuez", "avellana", "pistacho", "anacardo", "macadamia", "pecana"]
+        nuts_blocked = any(nut in all_text for nut in nuts)
         
-        # 7. Logging del resultado
-        confidence = resultado.get('confidence', 0.0)
-        logger.info(f"Análisis completado con confianza: {confidence}")
-        
-        return resultado
-        
-    except Exception as e:
-        logger.error(f"Error inesperado en analizar_imagen: {str(e)}")
-        return manejar_error_gemini("api_error", f"Error interno: {str(e)}")
+        return {
+            "success": True,
+            "restrictions": {
+                "vegano": {
+                    "apto": not vegano_blocked,
+                    "motivo": "Contiene productos animales" if vegano_blocked else None
+                },
+                "vegetariano": {
+                    "apto": not vegetariano_blocked,
+                    "motivo": "Contiene carne/pescado" if vegetariano_blocked else None
+                },
+                "sin_gluten": {
+                    "apto": not gluten_blocked,
+                    "motivo": "Contiene gluten" if gluten_blocked else None
+                },
+                "sin_lactosa": {
+                    "apto": not lactosa_blocked,
+                    "motivo": "Contiene lácteos" if lactosa_blocked else None
+                },
+                "sin_frutos_secos": {
+                    "apto": not nuts_blocked,
+                    "motivo": "Contiene frutos secos" if nuts_blocked else None
+                }
+            },
+            "confidence": 0.8,
+            "method": "local_classification"
+        }
+    
+    def _classify_additives_only(self, allergen_warnings: str) -> Dict:
+        """
+        Clasificación cuando solo hay aditivos
+        """
+        return {
+            "success": True,
+            "restrictions": {
+                "vegano": {"apto": True, "motivo": None},
+                "vegetariano": {"apto": True, "motivo": None},
+                "sin_gluten": {"apto": True, "motivo": None},
+                "sin_lactosa": {"apto": True, "motivo": None},
+                "sin_frutos_secos": {"apto": True, "motivo": None}
+            },
+            "confidence": 0.7,
+            "method": "additives_only"
+        }
+    
+    def _create_error_response(self, error_type: str, message: str) -> Dict:
+        """
+        Crea respuesta de error estandarizada
+        """
+        return {
+            "success": False,
+            "error": error_type,
+            "message": message,
+            "confidence": 0.0
+        }
+
+# Instancia global del servicio
+gemini_service = GeminiService()

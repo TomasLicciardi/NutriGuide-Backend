@@ -1,66 +1,66 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from app.services.gemini_service import analizar_imagen
+from app.services.gemini_service import gemini_service
 from app.database.connection import get_db
 from app.models import History, Product, User
 from app.utils.jwt import JWTBearer, extract_user_id
-from app.schemas.auth_schemas import Token
-from app.schemas.product_schemas import ImageType, ProductAnalysisResponse
+from app.schemas.product_schemas import ImageType
+from app.schemas.analysis_schemas import AnalysisResponseV2, ErrorResponse
 from app.resources.history import get_history_by_user_id, create_history_for_user
 from app.resources.user import get_user_by_id
-from app.resources.product import create_product
 import json
+import time
+import logging
+
+# Configurar logging
+logger = logging.getLogger(__name__)
 
 """
-Rutas relacionadas con el análisis de productos alimenticios.
+Rutas unificadas para el análisis de productos alimenticios.
+FLUJO UNIFICADO:
+1. OCR con Gemini → extraer ingredientes + advertencias
+2. Embeddings DB → clasificar cada ingrediente (BASE/ADITIVO)
+3. RAG + Gemini → clasificar solo ingredientes BASE
+4. Guardar en BD → resultado final
 """
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
-@router.post("/", response_model=ProductAnalysisResponse)
+@router.post("/", response_model=AnalysisResponseV2)
 async def analizar_producto(
     file: UploadFile = File(...),
     token: str = Depends(JWTBearer()),
     db: Session = Depends(get_db)
 ):
     """
-    Analiza un producto alimenticio a partir de una imagen de su etiqueta.
-
-    Args:
-        file (UploadFile): Archivo de imagen de la etiqueta.
-        token (str): Token JWT del usuario autenticado.
-        db (Session): Sesión de la base de datos.
-
+    ENDPOINT UNIFICADO de análisis de productos alimenticios.
+    
+    FLUJO COMPLETO:
+    1. 📸 OCR con Gemini → extraer ingredientes + advertencias  
+    2. 🧠 Embeddings DB → clasificar cada ingrediente (BASE/ADITIVO)
+    3. 🤖 RAG + Gemini → clasificar solo ingredientes BASE para restricciones
+    4. 💾 Guardar en BD → resultado final unificado
+    
     Returns:
-        ProductAnalysisResponse: Resultado del análisis y detalles del producto creado.
+        AnalysisResponseV2: Resultado completo del análisis
     """
-    usuario_id = extract_user_id(token)    # Obtener o crear el historial del usuario
+    start_time = time.time()
+    usuario_id = extract_user_id(token)
+    
+    # Obtener o crear historial del usuario
     historial = get_history_by_user_id(db, usuario_id)
     if not historial:
         historial = create_history_for_user(db, usuario_id)
 
-    # Obtener las restricciones del usuario
+    # Obtener restricciones del usuario
     usuario = get_user_by_id(db, usuario_id)
-    restricciones = usuario.get_restrictions() if usuario else []
+    restricciones_usuario = usuario.get_restrictions() if usuario else []
 
-    # Leer el contenido de la imagen una sola vez
+    # Leer contenido de la imagen
     image_data = await file.read()
     
-    # Validar y obtener el tipo de imagen
-    content_type = file.content_type
-    if not content_type:
-        # Intentar determinar el tipo de imagen por la extensión del archivo
-        if file.filename.lower().endswith('.png'):
-            content_type = ImageType.PNG.value
-        elif file.filename.lower().endswith('.webp'):
-            content_type = ImageType.WEBP.value
-        elif file.filename.lower().endswith('.gif'):
-            content_type = ImageType.GIF.value
-        else:
-            content_type = ImageType.JPEG.value
-    
-    # Verificar que el tipo de imagen es soportado
+    # Validar tipo de imagen
+    content_type = file.content_type or "image/jpeg"
     try:
         image_type = ImageType(content_type)
     except ValueError:
@@ -68,76 +68,213 @@ async def analizar_producto(
             status_code=400,
             detail=f"Tipo de imagen no soportado. Tipos permitidos: {', '.join([t.value for t in ImageType])}"
         )
-    # Analizar la imagen pasando los bytes directamente
+    
+    # 🔥 FASE 1: PRIMERA PETICIÓN A GEMINI - OCR
     try:
-        resultado = await analizar_imagen(image_data, restricciones=restricciones)
+        logger.info("🔍 FASE 1: Extracción OCR con Gemini")
+        ocr_result = await gemini_service.extract_ingredients_ocr(image_data, image_type.value)
+        
+        if not ocr_result.get("success"):
+            raise HTTPException(
+                status_code=400 if ocr_result.get("error") in ["poor_quality", "invalid_image"] else 500,
+                detail=ErrorResponse(
+                    error=ocr_result.get("error", "unknown"),
+                    message=ocr_result.get("message", "Error en OCR"),
+                    confidence=ocr_result.get("confidence", 0.0)
+                ).dict()
+            )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error al analizar la imagen: {str(e)}"
+            detail=f"Error en extracción OCR: {str(e)}"
         )
     
-    # ✅ VERIFICAR SI HAY ERRORES ANTES DE GUARDAR
-    if "error" in resultado:
-        # Si hay error, devolver 422 (Unprocessable Entity) sin guardar en BD
-        error_type = resultado["error"]
-        error_message = resultado["message"]
+    # 🔥 FASE 2: CLASIFICACIÓN CON EMBEDDINGS + RAG
+    try:
+        logger.info("🧠 FASE 2: Clasificación con embeddings + RAG")
+        ingredientes_detectados = ocr_result["ingredients"]
+        allergen_warnings = ocr_result.get("allergen_warnings", "")
         
-        # Mapear códigos de error HTTP apropiados
-        error_status_codes = {
-            "invalid_image": 400,      # Bad Request - imagen no válida
-            "poor_quality": 400,       # Bad Request - imagen de mala calidad
-            "no_ingredients": 400,     # Bad Request - no se encontraron ingredientes
-            "low_confidence": 422,     # Unprocessable Entity - análisis con baja confianza
-            "api_error": 500,          # Internal Server Error - error del servicio
-            "timeout": 408,            # Request Timeout - timeout
-            "rate_limit": 429,         # Too Many Requests - límite de solicitudes
+        # USAR FLUJO UNIFICADO:
+        # 1. Embeddings DB → clasificar cada ingrediente (BASE/ADITIVO)
+        # 2. Solo ingredientes BASE → SEGUNDA PETICIÓN a Gemini con RAG
+        classification_result = await gemini_service.classify_ingredients_with_embeddings_and_rag(
+            ingredientes_detectados, allergen_warnings, db
+        )
+        
+        if not classification_result.get("success"):
+            raise HTTPException(
+                status_code=422,
+                detail=ErrorResponse(
+                    error=classification_result.get("error", "classification_failed"),
+                    message=classification_result.get("message", "Error en clasificación"),
+                    confidence=classification_result.get("confidence", 0.0)
+                ).dict()
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en clasificación: {str(e)}"
+        )
+    
+    # 🔥 FASE 3: ALMACENAMIENTO EN BD
+    try:
+        logger.info("💾 FASE 3: Guardando en base de datos")
+        
+        # Debug: mostrar restricciones del usuario
+        logger.info(f"🔍 Usuario: {usuario.username if usuario else 'Anónimo'}")
+        logger.info(f"🔍 Restricciones del usuario: {restricciones_usuario}")
+        
+        # Calcular veredicto del usuario
+        user_verdict = calculate_user_verdict(classification_result, restricciones_usuario)
+        logger.info(f"🔍 User verdict calculado: {user_verdict}")
+        
+        # Extraer ingredientes clasificados
+        classified_ingredients = classification_result.get("classified_ingredients", [])
+        
+        # Construir resultado final completo para compatibilidad
+        base_ingredients = [ing for ing in classified_ingredients if ing["type"] == "BASE"]
+        additives = [ing for ing in classified_ingredients if ing["type"] == "ADITIVO"]
+        
+        final_result = {
+            "user_verdict": user_verdict,
+            "classification": {
+                "vegano": {"apto": classification_result["restrictions"]["vegano"]["apto"], 
+                          "motivo": classification_result["restrictions"]["vegano"].get("motivo")},
+                "vegetariano": {"apto": classification_result["restrictions"]["vegetariano"]["apto"], 
+                               "motivo": classification_result["restrictions"]["vegetariano"].get("motivo")},
+                "sin_gluten": {"apto": classification_result["restrictions"]["sin_gluten"]["apto"], 
+                              "motivo": classification_result["restrictions"]["sin_gluten"].get("motivo")},
+                "sin_lactosa": {"apto": classification_result["restrictions"]["sin_lactosa"]["apto"], 
+                               "motivo": classification_result["restrictions"]["sin_lactosa"].get("motivo")},
+                "sin_frutos_secos": {"apto": classification_result["restrictions"]["sin_frutos_secos"]["apto"], 
+                                    "motivo": classification_result["restrictions"]["sin_frutos_secos"].get("motivo")}
+            },
+            "detected_ingredients": ingredientes_detectados,
+            "base_ingredients": [ing["name"] for ing in base_ingredients],
+            "additives": [ing["name"] for ing in additives],
+            "allergen_warnings": allergen_warnings,
+            "confidence": min(ocr_result["confidence"], classification_result["confidence"])
         }
         
-        status_code = error_status_codes.get(error_type, 422)
-        
-        raise HTTPException(
-            status_code=status_code,
-            detail={
-                "error": error_type,
-                "message": error_message,
-                "instructions": get_error_instructions(error_type)
-            }
-        )
-    
-    # ✅ SOLO GUARDAR SI EL ANÁLISIS FUE EXITOSO
-    # Crear el producto con la nueva estructura
-    try:
-        nuevo_producto = create_product(
-            db, 
-            result_json=resultado,
+        # Crear producto en BD
+        nuevo_producto = Product(
             history_id=historial.id,
+            image=image_data,
             image_type=image_type.value,
-            image_data=image_data
+            
+            # Resultados OCR
+            ocr_result_json=json.dumps(ocr_result),
+            extracted_ingredients=json.dumps(ingredientes_detectados),
+            allergen_warnings=allergen_warnings,
+            ocr_confidence=ocr_result["confidence"],
+            
+            # Resultados clasificación
+            classification_result_json=json.dumps(classification_result),
+            classification_confidence=classification_result["confidence"],
+            
+            # Restricciones individuales
+            is_vegan=classification_result["restrictions"]["vegano"]["apto"],
+            vegan_reason=classification_result["restrictions"]["vegano"].get("motivo"),
+            is_vegetarian=classification_result["restrictions"]["vegetariano"]["apto"],
+            vegetarian_reason=classification_result["restrictions"]["vegetariano"].get("motivo"),
+            is_gluten_free=classification_result["restrictions"]["sin_gluten"]["apto"],
+            gluten_free_reason=classification_result["restrictions"]["sin_gluten"].get("motivo"),
+            is_lactose_free=classification_result["restrictions"]["sin_lactosa"]["apto"],
+            lactose_free_reason=classification_result["restrictions"]["sin_lactosa"].get("motivo"),
+            is_nut_free=classification_result["restrictions"]["sin_frutos_secos"]["apto"],
+            nut_free_reason=classification_result["restrictions"]["sin_frutos_secos"].get("motivo"),
+            
+            # Resultado completo para compatibilidad
+            result_json=json.dumps(final_result),
+            
+            # Metadatos
+            is_suitable=user_verdict,
+            processing_status="completed"
         )
+        
+        db.add(nuevo_producto)
+        db.commit()
+        
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=f"Error al guardar el producto: {str(e)}"
+            detail=f"Error almacenando en BD: {str(e)}"
         )
-
-    return ProductAnalysisResponse(
-        product_id=nuevo_producto.id,
-        is_suitable=nuevo_producto.is_suitable,
-        result_json=resultado
+    
+    # 🔥 FASE 4: RESPUESTA FINAL
+    processing_time = time.time() - start_time
+    
+    logger.info(f"✅ ANÁLISIS COMPLETADO en {processing_time:.2f}s - {len(base_ingredients)} BASE, {len(additives)} ADITIVOS")
+    
+    # Agregar processing_time al resultado final
+    final_result["processing_time"] = processing_time
+    
+    return AnalysisResponseV2(
+        user_verdict=user_verdict,
+        classification={
+            "vegano": {"apto": classification_result["restrictions"]["vegano"]["apto"], 
+                      "motivo": classification_result["restrictions"]["vegano"].get("motivo")},
+            "vegetariano": {"apto": classification_result["restrictions"]["vegetariano"]["apto"], 
+                           "motivo": classification_result["restrictions"]["vegetariano"].get("motivo")},
+            "sin_gluten": {"apto": classification_result["restrictions"]["sin_gluten"]["apto"], 
+                          "motivo": classification_result["restrictions"]["sin_gluten"].get("motivo")},
+            "sin_lactosa": {"apto": classification_result["restrictions"]["sin_lactosa"]["apto"], 
+                           "motivo": classification_result["restrictions"]["sin_lactosa"].get("motivo")},
+            "sin_frutos_secos": {"apto": classification_result["restrictions"]["sin_frutos_secos"]["apto"], 
+                                "motivo": classification_result["restrictions"]["sin_frutos_secos"].get("motivo")}
+        },
+        detected_ingredients=ingredientes_detectados,
+        base_ingredients=[ing["name"] for ing in base_ingredients],
+        additives=[ing["name"] for ing in additives],
+        allergen_warnings=allergen_warnings,
+        confidence=min(ocr_result["confidence"], classification_result["confidence"]),
+        processing_time=processing_time
     )
 
-def get_error_instructions(error_type: str) -> str:
+def calculate_user_verdict(classification_result: dict, user_restrictions: list) -> bool:
     """
-    Devuelve instrucciones específicas para cada tipo de error.
+    Calcula veredicto final para el usuario basado en sus restricciones activas
     """
-    instructions = {
-        "invalid_image": "Toma una foto de la etiqueta nutricional del producto, asegurándote de que muestre la lista de ingredientes.",
-        "poor_quality": "Mejora la calidad de la imagen: usa mejor iluminación, enfoque la cámara y mantén la imagen estable.",
-        "no_ingredients": "Asegúrate de que la foto muestre claramente la sección de ingredientes de la etiqueta.",
-        "low_confidence": "Toma una foto más clara de la etiqueta completa con mejor iluminación y enfoque.",
-        "api_error": "Error temporal del sistema. Intenta nuevamente en unos momentos.",
-        "timeout": "La imagen está tardando mucho en procesarse. Intenta con una imagen más clara y pequeña.",
-        "rate_limit": "Has realizado demasiadas solicitudes. Espera unos minutos antes de intentar nuevamente."
+    logger.info(f"🔍 Calculando veredicto para restricciones: {user_restrictions}")
+    
+    if not user_restrictions:
+        logger.info("✅ Sin restricciones de usuario → APTO")
+        return True  # Sin restricciones = apto
+    
+    # Mapeo de restricciones para compatibilidad
+    restriction_mapping = {
+        'sin_tacc': 'sin_gluten',  # TACC = gluten en Argentina
+        'celiacos': 'sin_gluten',
+        'lactose_free': 'sin_lactosa',
+        'nut_free': 'sin_frutos_secos',
+        'vegan': 'vegano',
+        'vegetarian': 'vegetariano'
     }
-    return instructions.get(error_type, "Intenta nuevamente con una imagen diferente.")
+    
+    classification = classification_result["restrictions"]
+    logger.info(f"🔍 Clasificaciones disponibles: {list(classification.keys())}")
+    
+    for restriction in user_restrictions:
+        # Mapear restricción si es necesario
+        mapped_restriction = restriction_mapping.get(restriction, restriction)
+        logger.info(f"🔍 Evaluando '{restriction}' → '{mapped_restriction}'")
+        
+        if mapped_restriction in classification:
+            is_apt = classification[mapped_restriction]["apto"]
+            reason = classification[mapped_restriction].get("motivo")
+            logger.info(f"🔍 Restricción '{mapped_restriction}': apto={is_apt}, motivo='{reason}'")
+            
+            if not is_apt:
+                logger.info(f"❌ NO APTO por restricción '{restriction}' ('{mapped_restriction}'): {reason}")
+                return False  # Una restricción no cumplida = no apto
+        else:
+            logger.warning(f"⚠️ Restricción '{mapped_restriction}' no encontrada en clasificación")
+    
+    logger.info("✅ Todas las restricciones cumplidas → APTO")
+    return True  # Todas las restricciones cumplidas = apto

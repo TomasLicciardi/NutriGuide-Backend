@@ -59,6 +59,10 @@ def obtener_producto(id: int, token: str = Depends(JWTBearer()), db: Session = D
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
     
+    # Validar que result_json no sea None
+    if producto.result_json is None:
+        raise HTTPException(status_code=500, detail="Datos del producto incompletos")
+    
     result_json = json.loads(producto.result_json)
     image_url = f"/history/product/{producto.id}/image"
     
