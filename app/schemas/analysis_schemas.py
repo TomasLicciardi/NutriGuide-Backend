@@ -17,7 +17,7 @@ class ClassificationResult(BaseModel):
 
 class OCRResult(BaseModel):
     ingredientes_detectados: List[str]
-    alerenos_advertencias: Optional[str] = None
+    alergenos_advertencias: Optional[str] = None
     confidence: float
 
 class AnalysisResultV2(BaseModel):

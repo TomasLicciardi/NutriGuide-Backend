@@ -31,6 +31,148 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-2.0-flash-lite")
 
 class GeminiService:
+    """
+    Mapa de aditivos DE ORIGEN ANIMAL que aparecen frecuentemente en productos
+    argentinos procesados. Clave: substring normalizado (sin acentos, minúsculas).
+    Valor: lista de restricciones que VIOLA ese aditivo.
+
+    Propósito: safety net que corrige posibles alucinaciones de Gemini.
+    Si Gemini dice 'vegano: true' pero hay carmín/caseinato en la lista,
+    este mapa fuerza la corrección antes de devolver la respuesta.
+    """
+    _KNOWN_ANIMAL_ADDITIVES: Dict[str, List[str]] = {
+        # ── Colorantes de insecto ── (carmín E120/INS 120)
+        "carmin":             ["vegano"],
+        "carmine":            ["vegano"],
+        "cochinilla":         ["vegano"],
+        "e 120":              ["vegano"],
+        "e120":               ["vegano"],
+        "ins 120":            ["vegano"],
+        "ins120":             ["vegano"],
+        # ── Gelatina de origen animal ──
+        "gelatina":           ["vegano", "vegetariano"],
+        # ── Cera de abejas ──
+        "cera de abeja":      ["vegano"],
+        # ── Lácteos en forma de aditivos ──
+        "caseinato":          ["vegano", "sin_lactosa"],
+        "caseina":            ["vegano", "sin_lactosa"],
+        "lactosuero":         ["vegano", "sin_lactosa"],
+        "suero de leche":     ["vegano", "sin_lactosa"],
+        "proteinas de leche": ["vegano", "sin_lactosa"],
+        # ── Derivados de huevo ──
+        "lecitina de huevo":  ["vegano"],
+        "albumina de huevo":  ["vegano"],
+        "ovoalbumina":        ["vegano"],
+        # ── Almidones/harinas de trigo (en aditivos) ──
+        "almidon de trigo":   ["sin_gluten"],
+        "harina de trigo":    ["sin_gluten"],
+        "maltodextrina de trigo": ["sin_gluten"],
+        "gluten de trigo":    ["sin_gluten"],
+        # ── Aceites de frutos secos ──
+        "aceite de mani":     ["sin_frutos_secos"],
+        "aceite de almendras":["sin_frutos_secos"],
+        "aceite de avellanas":["sin_frutos_secos"],
+    }
+
+    # ── Rangos INS seguros: definitivamente sintéticos, sin origen animal ──
+    # No incluye 100-199 (colorantes) porque hay que analizar origen caso a caso.
+    # No incluye almidones modificados (1400-1442) porque el origen puede ser trigo.
+    _ANIMAL_INS_CODES: frozenset = frozenset([120, 441, 542, 904])
+
+    @staticmethod
+    def _is_safe_synthetic_ins(code: int) -> bool:
+        """True si el código INS/E es de un aditivo sintético sin origen animal."""
+        ANIMAL = {120, 441, 542, 904}
+        if code in ANIMAL:
+            return False
+        return (
+            200 <= code <= 239 or   # Preservantes: sorbatos, benzoatos, sulfitos
+            280 <= code <= 283 or   # Propionatos
+            300 <= code <= 321 or   # Antioxidantes: vitamina C, tocoferoles, BHA, BHT, TBHQ
+            330 <= code <= 341 or   # Acidulantes: ácido cítrico, tartárico, fosfórico
+            450 <= code <= 452 or   # Fosfatos poliméricos
+            500 <= code <= 511 or   # Carbonatos/bicarbonatos/sales minerales
+            551 <= code <= 580 or   # Silicatos y minerales
+            620 <= code <= 635 or   # Potenciadores de sabor: glutamato, inosinato
+            950 <= code <= 969      # Edulcorantes sintéticos/vegetales: aspartamo, sucralosa, stevia
+        )
+
+    # Keywords de aditivos sintéticos seguros (sin origen animal)
+    _SAFE_SYNTHETIC_KEYWORDS: frozenset = frozenset([
+        "sorbato", "benzoato", "propionato", "nisina",
+        "acido sorbico", "acido benzoico", "acido propionico",
+        "acido citrico", "citrato de sodio", "citrato de potasio", "citrato de calcio",
+        "acido tartarico", "tartrato", "acido malico", "acido lactico",
+        "acido fosforico", "fosfato monosodico", "fosfato disodico", "fosfato trisodico",
+        "acido ascorbico", "ascorbato de sodio", "ascorbato de calcio",
+        "tocoferol", "bha", "bht", "tbhq",
+        "bicarbonato de sodio", "bicarbonato de calcio", "bicarbonato de amonio",
+        "carbonato de sodio", "carbonato de calcio", "carbonato de potasio",
+        "dioxido de carbono", "nitrogeno gaseoso",
+        "goma xantica", "goma guar", "goma arabiga", "goma garrofin", "goma tara",
+        "carragenina", "carragenano", "alginato", "pectina",
+        "dioxido de silicio", "silicato de magnesio",
+        "glutamato monosodico", "glutamato de sodio",
+        "inosinato de disodio", "guanilato de disodio", "ribonucleotido disodico",
+        "acesulfame", "aspartamo", "ciclamato", "sacarina", "sucralosa", "stevia",
+        "esteviol", "maltitol", "xilitol", "sorbitol", "manitol",
+    ])
+
+    def _prescreen_ingredients(self, ingredients: List[str]) -> Tuple[List[str], List[str]]:
+        """
+        Separa ingredientes ANTES de enviarlos a Gemini:
+
+        - need_gemini: ingredientes BASE, colorantes con posible origen animal,
+          y cualquier cosa no claramente sintética. Gemini los analiza.
+
+        - safe_synthetics: aditivos sintéticos con certeza (rangos INS seguros
+          o keywords conocidos). No se envían a Gemini → menos tokens, cero
+          riesgo de alucinación en ingredientes inocuos.
+
+        CONSERVADOR: ante la duda, el ingrediente va a need_gemini.
+        """
+        import re
+        need_gemini: List[str] = []
+        safe_synthetics: List[str] = []
+
+        for ingredient in ingredients:
+            norm = self._normalize_text(ingredient)
+
+            # Nunca marcar seguro si coincide con aditivo animal conocido
+            if any(k in norm for k in self._KNOWN_ANIMAL_ADDITIVES):
+                need_gemini.append(ingredient)
+                continue
+
+            # Código INS explícito → verificar si está en rango seguro
+            ins_match = re.search(r'\bins\s*(\d{3,4})\b', norm)
+            if ins_match:
+                code = int(ins_match.group(1))
+                if self._is_safe_synthetic_ins(code):
+                    safe_synthetics.append(ingredient)
+                else:
+                    need_gemini.append(ingredient)  # colorante u otro ambiguo
+                continue
+
+            # Código E europeo → misma lógica
+            e_match = re.match(r'^e(\d{3,4})[a-z]?$', norm)
+            if e_match:
+                code = int(e_match.group(1))
+                if self._is_safe_synthetic_ins(code):
+                    safe_synthetics.append(ingredient)
+                else:
+                    need_gemini.append(ingredient)
+                continue
+
+            # Keyword de sintético conocido
+            if any(kw in norm for kw in self._SAFE_SYNTHETIC_KEYWORDS):
+                safe_synthetics.append(ingredient)
+                continue
+
+            # Por defecto: necesita Gemini
+            need_gemini.append(ingredient)
+
+        return need_gemini, safe_synthetics
+
     def __init__(self):
         self.supported_restrictions = [
             "vegano", "vegetariano", "sin_gluten", "sin_lactosa", "sin_frutos_secos"
@@ -124,59 +266,71 @@ class GeminiService:
     async def classify_ingredients_with_embeddings_and_rag(self, ingredients: List[str], allergen_warnings: str, db: Session) -> Dict:
         """
         FLUJO PRINCIPAL DE CLASIFICACIÓN:
-        1. Usar embeddings DB para clasificar cada ingrediente (BASE/ADITIVO)
-        2. Solo ingredientes BASE → SEGUNDA PETICIÓN a Gemini con RAG
+        1. Clasificar cada ingrediente como BASE/ADITIVO (para display)
+        2. TODOS los ingredientes → SEGUNDA PETICIÓN a Gemini con RAG
+           (porque algunos aditivos afectan restricciones: lecitina de huevo,
+            caseinato de sodio, carmín/cochinilla, etc.)
         3. Combinar resultados y devolver clasificación final
         """
         try:
             logger.info(f"🔍 Iniciando clasificación de {len(ingredients)} ingredientes")
             
-            # PASO 1: Clasificar cada ingrediente individualmente
+            # PASO 1: Clasificar cada ingrediente individualmente (BASE/ADITIVO para display)
             classified_ingredients = []
             base_ingredients = []
-            
+
             from app.services.embedding_service import EmbeddingService
             embedding_service = EmbeddingService()
-            
+
             for ingredient_name in ingredients:
                 ingredient_data = await self._classify_ingredient_by_embeddings(
                     ingredient_name, db, embedding_service
                 )
                 classified_ingredients.append(ingredient_data)
-                
                 if ingredient_data["type"] == "BASE":
                     base_ingredients.append(ingredient_data)
-            
+
             logger.info(f"✅ Clasificados: {len(classified_ingredients)} total, {len(base_ingredients)} BASE")
-            
-            # PASO 2: Solo ingredientes BASE → RAG + SEGUNDA PETICIÓN A GEMINI
-            if base_ingredients:
-                logger.info("🤖 Clasificando ingredientes BASE con Gemini + RAG...")
-                base_names = [ing["name"] for ing in base_ingredients]
-                
-                # Obtener contexto RAG
-                rag_context = await rag_service.get_classification_context(base_names, db)
-                
-                # SEGUNDA PETICIÓN A GEMINI
+
+            # PASO 2: Pre-screening — separar sintéticos seguros de los que necesitan Gemini
+            # Esto reduce el prompt y elimina alucinaciones en aditivos inocuos (INS 200-321, etc.)
+            all_ingredient_names = [ing["name"] for ing in classified_ingredients]
+            ingredients_for_gemini, safe_synthetics = self._prescreen_ingredients(all_ingredient_names)
+
+            if safe_synthetics:
+                logger.info(f"⚡ {len(safe_synthetics)} sintéticos seguros omitidos en Gemini: {safe_synthetics[:5]}")
+
+            if ingredients_for_gemini:
+                logger.info(f"🤖 Enviando {len(ingredients_for_gemini)}/{len(all_ingredient_names)} ingredientes a Gemini+RAG...")
+
+                # Contexto RAG con todos los ingredientes (incluyendo sintéticos para embeddings)
+                rag_context = await rag_service.get_classification_context(all_ingredient_names, db)
+
+                # Gemini solo analiza los ingredientes que realmente necesita ver
                 final_classification = await self._classify_base_ingredients_with_rag(
-                    base_names, allergen_warnings, rag_context
+                    ingredients_for_gemini, allergen_warnings, rag_context
                 )
-                
+
                 if final_classification.get("success"):
                     logger.info("✅ Clasificación RAG exitosa")
                     result = final_classification
                 else:
                     logger.warning("⚠️ Fallo Gemini RAG, usando clasificación local")
-                    result = self._classify_local_fast(base_names, allergen_warnings)
+                    result = self._classify_local_fast(all_ingredient_names, allergen_warnings)
             else:
-                logger.info("ℹ️ No hay ingredientes BASE, clasificación básica")
+                # Todos los ingredientes son sintéticos seguros → solo verificar advertencias
+                logger.info("ℹ️ Solo sintéticos seguros → clasificación local por advertencias")
                 result = self._classify_additives_only(allergen_warnings)
-            
-            # PASO 3: Agregar metadata
+
+            # PASO 3: Safety net — corregir posibles alucinaciones de Gemini
+            # para aditivos de origen animal bien conocidos
+            result = self._apply_known_facts_override(result, all_ingredient_names, allergen_warnings)
+
+            # PASO 4: Agregar metadata
             result["classified_ingredients"] = classified_ingredients
             result["base_ingredients_count"] = len(base_ingredients)
             result["total_ingredients_count"] = len(classified_ingredients)
-            
+
             return result
             
         except Exception as e:
@@ -186,56 +340,84 @@ class GeminiService:
     
     async def _classify_ingredient_by_embeddings(self, ingredient_name: str, db: Session, embedding_service) -> Dict:
         """
-        Clasifica un ingrediente usando embeddings de la DB
+        Clasifica un ingrediente usando la DB y embeddings semánticos:
+        1. Búsqueda exacta en DB (rápido)
+        2. Similitud semántica por embeddings
+        3. Heurística como fallback + guarda en DB con json.dumps
         """
         try:
             from app.models.ingredient import Ingredient, IngredientType
             from sqlalchemy import func
-            
-            # Buscar ingredientes similares en DB
-            similar_ingredient = db.query(Ingredient).filter(
-                func.lower(Ingredient.name).contains(ingredient_name.lower())
+
+            name_lower = ingredient_name.lower().strip()
+
+            # 1. Buscar coincidencia exacta en DB
+            exact_match = db.query(Ingredient).filter(
+                func.lower(Ingredient.name) == name_lower
             ).first()
-            
-            if similar_ingredient:
-                logger.info(f"✅ Encontrado en DB: {ingredient_name} → {similar_ingredient.type.value}")
+
+            if not exact_match:
+                # Búsqueda parcial como segundo intento rápido
+                exact_match = db.query(Ingredient).filter(
+                    func.lower(Ingredient.name).contains(name_lower)
+                ).first()
+
+            if exact_match:
+                logger.info(f"✅ Encontrado en DB: {ingredient_name} → {exact_match.type.value}")
                 return {
                     "name": ingredient_name,
-                    "type": similar_ingredient.type.value,
+                    "type": exact_match.type.value,
                     "confidence": 0.9,
                     "source": "database"
                 }
-            else:
-                # Clasificación heurística si no está en DB
-                is_additive = any(keyword in ingredient_name.lower() for keyword in 
-                                 ['emulsificante', 'emulsionante', 'aromatizante', 'colorante', 
-                                  'vitamina', 'mineral', 'lecitina', 'estabilizante', 'conservante',
-                                  'antioxidante', 'edulcorante', 'espesante'])
-                
-                ingredient_type = "ADITIVO" if is_additive else "BASE"
-                
-                # Guardar en DB para futuras consultas
-                embedding = await embedding_service.generate_embedding(ingredient_name)
-                
-                new_ingredient = Ingredient(
-                    name=ingredient_name.lower().strip(),
-                    original_name=ingredient_name,
-                    type=IngredientType.ADITIVO if is_additive else IngredientType.BASE,
-                    embedding=str(embedding) if embedding else None,
-                    confidence=0.8
-                )
-                db.add(new_ingredient)
-                db.flush()
-                
-                logger.info(f"💾 Nuevo ingrediente: {ingredient_name} → {ingredient_type}")
-                
+
+            # 2. Buscar por similitud semántica con embeddings
+            similar_by_embedding = embedding_service.find_similar_ingredients(
+                ingredient_name, db, threshold=0.82
+            )
+            if similar_by_embedding:
+                best_match, similarity = similar_by_embedding[0]
+                logger.info(f"🧠 Similitud semántica: {ingredient_name} → {best_match.type.value} (sim={similarity:.2f})")
                 return {
                     "name": ingredient_name,
-                    "type": ingredient_type,
-                    "confidence": 0.8,
-                    "source": "heuristic"
+                    "type": best_match.type.value,
+                    "confidence": round(similarity, 2),
+                    "source": "embedding_similarity"
                 }
-                
+
+            # 3. Clasificación heurística como fallback
+            import re
+            is_additive = any(keyword in name_lower for keyword in
+                             ['emulsificante', 'emulsionante', 'aromatizante', 'colorante',
+                              'vitamina', 'mineral', 'lecitina', 'estabilizante', 'conservante',
+                              'antioxidante', 'edulcorante', 'espesante', 'acidulante',
+                              'regulador', 'potenciador', 'conservador'])
+
+            if re.match(r'^e\d{3,4}[a-z]*$', name_lower):
+                is_additive = True
+
+            ingredient_type = "ADITIVO" if is_additive else "BASE"
+
+            # Guardar en DB con embedding para futuras consultas (json.dumps no str())
+            embedding = await embedding_service.generate_embedding(ingredient_name)
+            new_ingredient = Ingredient(
+                name=name_lower,
+                original_name=ingredient_name,
+                type=IngredientType.ADITIVO if is_additive else IngredientType.BASE,
+                embedding=json.dumps(embedding) if embedding else None,
+                confidence=0.75
+            )
+            db.add(new_ingredient)
+            db.flush()
+
+            logger.info(f"💾 Nuevo ingrediente guardado: {ingredient_name} → {ingredient_type}")
+            return {
+                "name": ingredient_name,
+                "type": ingredient_type,
+                "confidence": 0.75,
+                "source": "heuristic"
+            }
+
         except Exception as e:
             logger.error(f"❌ Error clasificando {ingredient_name}: {e}")
             return {
@@ -273,65 +455,95 @@ class GeminiService:
     
     def _get_ocr_prompt(self) -> str:
         """
-        Prompt para extracción OCR de ingredientes
+        Prompt OCR optimizado para etiquetas de productos alimenticios
+        argentinos y latinoamericanos.
         """
-        return """
-Extrae la información de esta etiqueta de producto alimenticio:
+        return """Analiza esta etiqueta de producto alimenticio (Argentina/Latinoamérica).
 
-1. INGREDIENTES: Lista completa de ingredientes en orden
-2. ADVERTENCIAS: Texto de "CONTIENE", "PUEDE CONTENER", etc.
+EXTRAE:
+1. LISTA DE INGREDIENTES: Cada ingrediente/aditivo por separado.
 
-IMPORTANTE: 
-- Separa cada ingrediente individualmente
-- Incluye todas las advertencias de alérgenos
-- Mantén los nombres originales de ingredientes
+REGLAS CRÍTICAS PARA ETIQUETAS ARGENTINAS:
+- Abreviaturas funcionales → extraer solo el ingrediente que sigue:
+  EMU: lecitina de soja → "lecitina de soja"
+  ACI: ácido cítrico (INS 330) → "ácido cítrico"
+  ARO: sabor a vainilla → "sabor a vainilla"
+  CON: sorbato de potasio → "sorbato de potasio"
+  COL: caramelo IV → "caramelo IV"
+  EST: goma xántica → "goma xántica"
+  RES: glutamato monosódico → "glutamato monosódico"
+  SEC: EDTA disódico → "EDTA disódico"
 
-Responde en JSON:
+- Enriquecimiento por ley (Ley 25.630): extraer SOLO el ingrediente base, NO los contenidos entre paréntesis con mg/kg.
+  "harina de trigo enriquecida ley 25.630 (sulfato ferroso: 30mg/kg, niacina...)" → extraer "harina de trigo enriquecida"
+
+- Sub-ingredientes entre paréntesis SÍ se extraen por separado:
+  "sazonador (sal, azúcar, glutamato monosódico)" → extraer "sazonador", "sal", "azúcar", "glutamato monosódico"
+
+- Códigos INS o E: incluirlos tal como aparecen (son aditivos técnicos):
+  "lecitina de soja (INS 322)" → extraer "lecitina de soja"
+  "bicarbonato de sodio (INS 500ii)" → extraer "bicarbonato de sodio"
+
+- Ingredientes con origen especificado: mantener la descripción completa:
+  "aceite vegetal de palma y canola (TBHQ)" → extraer "aceite vegetal de palma y canola", "TBHQ"
+
+2. ADVERTENCIAS DE ALÉRGENOS: Texto completo de CONTIENE, PUEDE CONTENER, SIN TACC, LIBRE DE GLUTEN, etc.
+
+Si la imagen NO es una etiqueta alimentaria o no se pueden leer ingredientes, responde con listas vacías.
+
+RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
 {
-  "ingredientes_detectados": ["ingrediente1", "ingrediente2", "ingrediente3"],
-  "alerenos_advertencias": "texto completo de advertencias o null",
+  "ingredientes_detectados": ["ingrediente1", "ingrediente2", "aditivo1"],
+  "alergenos_advertencias": "CONTIENE: GLUTEN. PUEDE CONTENER: SOJA." o null,
   "confidence": 0.95
 }
 """
     
     def _get_rag_classification_prompt(self, base_ingredients: List[str], allergen_warnings: str, rag_context: str) -> str:
         """
-        Prompt para clasificación RAG de ingredientes BASE
+        Prompt de clasificación de restricciones para etiquetas argentinas/latinoamericanas.
+        Recibe TODOS los ingredientes (BASE + ADITIVOS relevantes).
         """
         ingredients_text = ", ".join(base_ingredients)
         allergen_text = allergen_warnings if allergen_warnings else "Sin advertencias"
-        
-        return f"""
-Clasifica estos INGREDIENTES BASE para restricciones dietéticas usando el contexto RAG.
 
-INGREDIENTES BASE: {ingredients_text}
-ADVERTENCIAS: {allergen_text}
+        return f"""Clasifica estos ingredientes de un producto argentino/latinoamericano para 5 restricciones dietéticas.
 
-CONTEXTO RAG:
+INGREDIENTES: {ingredients_text}
+ADVERTENCIAS DE ALÉRGENOS: {allergen_text}
+
+CONTEXTO DE CONOCIMIENTO:
 {rag_context}
 
+REGLAS ESPECÍFICAS PARA ARGENTINA:
+- TACC = Trigo, Avena, Cebada, Centeno → "CONTIENE TACC" o "SIN TACC" afecta sin_gluten
+- Caseinato de sodio / caseinato de calcio = derivado lácteo → afecta vegano y sin_lactosa
+- Suero de leche / lactosuero = derivado lácteo → afecta vegano y sin_lactosa
+- Carmín / Cochinilla / E120 = colorante de insecto → NO es vegano
+- Lecitina de soja = OK para veganos (no es animal)
+- Lecitina de huevo = NO es vegano
+- TBHQ / BHA / BHT = antioxidantes sintéticos, no afectan restricciones dietéticas
+- Sulfitos = aditivos conservantes, no afectan las 5 restricciones
+- Carne bovina / vacuno / bovino = carne → afecta vegano y vegetariano
+- Atún / anchoa / sardina / merluza = pescado → afecta vegano y vegetariano
+- Las advertencias "PUEDE CONTENER" son tan importantes como "CONTIENE" para alergias
+- Si NO reconoces el origen exacto de un aditivo (código INS, E, o nombre químico raro) → marca APTO. La mayoría de los aditivos son sintéticos o de origen vegetal y no afectan las 5 restricciones.
+- INS 471 / E471 (monoglicéridos y diglicéridos): en Argentina se usa origen vegetal → APTO para veganos salvo que la etiqueta especifique "animal"
+- ANTE LA DUDA sobre si un aditivo es animal → APTO (no falles una restricción sin certeza)
+
 EVALÚA CADA RESTRICCIÓN:
-- vegano: ¿Sin productos animales? (leche, huevo, carne, miel)
-- vegetariano: ¿Sin carne/pescado? (lácteos OK)  
-- sin_gluten: ¿Sin gluten/trigo?
-- sin_lactosa: ¿Sin lácteos?
-- sin_frutos_secos: ¿Sin frutos secos?
+- vegano: ¿Sin NINGÚN producto animal? (leche, huevo, carne, pescado, miel, carmín/cochinilla)
+- vegetariano: ¿Sin carne ni pescado? (lácteos y huevos SÍ son aptos)
+- sin_gluten: ¿Sin TACC? (trigo, avena, cebada, centeno, gluten, semolina, malta)
+- sin_lactosa: ¿Sin lácteos? (leche, suero, caseinato, caseína, lactosa, queso, mantequilla)
+- sin_frutos_secos: ¿Sin frutos secos? (almendra, nuez, avellana, pistacho, anacardo, maní/cacahuate, macadamia)
 
 INSTRUCCIONES CRÍTICAS:
-- CONSISTENCIA: Si dices "apto": true, la razón debe ser positiva o null
-- CONSISTENCIA: Si dices "apto": false, la razón debe mencionar el ingrediente problemático
-- Si es APTO: razon puede ser null o "Sin [problema] detectado" 
-- Si NO es APTO: razon debe ser "Contiene [ingrediente específico]"
-- NO hagas listas de ingredientes
-- SÉ DIRECTO Y PRECISO
+- Si dices "apto": true → razon debe ser null
+- Si dices "apto": false → razon debe decir exactamente "Contiene [ingrediente específico]"
+- Si hay "PUEDE CONTENER X" en advertencias y el usuario tiene alergia a X → apto: false
 
-EJEMPLOS CORRECTOS:
-- vegano APTO: {{"apto": true, "razon": null}} 
-- vegano NO APTO: {{"apto": false, "razon": "Contiene leche"}}
-- gluten APTO: {{"apto": true, "razon": null}}
-- gluten NO APTO: {{"apto": false, "razon": "Contiene trigo"}}
-
-JSON RESPUESTA:
+RESPONDE ÚNICAMENTE EN JSON VÁLIDO:
 {{
   "vegano": {{"apto": true/false, "razon": null o "Contiene [ingrediente]"}},
   "vegetariano": {{"apto": true/false, "razon": null o "Contiene [ingrediente]"}},
@@ -361,7 +573,7 @@ JSON RESPUESTA:
             return {
                 "success": True,
                 "ingredients": result["ingredientes_detectados"],
-                "allergen_warnings": result.get("alerenos_advertencias"),
+                "allergen_warnings": result.get("alergenos_advertencias"),
                 "confidence": result.get("confidence", 0.5)
             }
             
@@ -427,65 +639,106 @@ JSON RESPUESTA:
             logger.error(f"Error parseando clasificación: {e}")
             return {"success": False, "error": "parse_failed"}
     
+    def _normalize_text(self, text: str) -> str:
+        """
+        Normaliza texto eliminando acentos y convirtiendo a minúsculas.
+        Necesario porque el OCR puede devolver "atun" o "atún" indistintamente.
+        """
+        import unicodedata
+        return ''.join(
+            c for c in unicodedata.normalize('NFD', text)
+            if unicodedata.category(c) != 'Mn'
+        ).lower()
+
     def _classify_local_fast(self, ingredients: List[str], allergen_warnings: str) -> Dict:
         """
-        Clasificación local rápida y precisa (fallback)
+        Clasificación local de fallback. Cubre términos argentinos y normaliza acentos.
         """
-        all_text = " ".join(ingredients).lower() + " " + (allergen_warnings or "").lower()
-        
-        # Buscar productos animales
-        animal_products = ["huevo", "leche", "carne", "pollo", "pescado", "miel", "gelatina", 
-                          "caseinato", "suero", "lactosa", "queso", "mantequilla", "yogur"]
-        vegano_blocked = any(product in all_text for product in animal_products)
-        
-        # Solo carne y pescado para vegetarianos
-        meat_fish = ["carne", "pollo", "pescado", "cerdo", "res", "cordero", "atún", "salmón"]
-        vegetariano_blocked = any(meat in all_text for meat in meat_fish)
-        
-        # Gluten
-        gluten_sources = ["trigo", "cebada", "centeno", "avena", "gluten", "malta", "sémola"]
-        gluten_blocked = any(source in all_text for source in gluten_sources)
-        
-        # Lácteos
-        dairy_products = ["leche", "lactosa", "queso", "mantequilla", "yogur", "suero", "caseinato"]
-        lactosa_blocked = any(dairy in all_text for dairy in dairy_products)
-        
-        # Frutos secos
-        nuts = ["almendra", "nuez", "avellana", "pistacho", "anacardo", "macadamia", "pecana"]
-        nuts_blocked = any(nut in all_text for nut in nuts)
-        
+        # Normalizar todo el texto (sin acentos) para comparación robusta
+        all_text = self._normalize_text(" ".join(ingredients) + " " + (allergen_warnings or ""))
+
+        # ─── VEGANO ──────────────────────────────────────────────────────────
+        # Sin ningún producto de origen animal
+        animal_products = [
+            # Lácteos
+            "leche", "lactosa", "queso", "mantequilla", "manteca", "yogur", "yogurt",
+            "crema", "nata", "suero", "caseinato", "caseina", "lactosuero", "lacteo",
+            # Huevo
+            "huevo", "albumina", "ovalbumina", "yema", "clara",
+            # Carnes
+            "carne", "pollo", "cerdo", "res", "vacuno", "bovino", "porcino", "ovino",
+            "cordero", "pavo", "ave", "jamon", "embutido", "salchicha",
+            # Pescado y mariscos
+            "pescado", "atun", "salmon", "anchoa", "sardina", "bacalao", "merluza",
+            "marisco", "camaron", "langosta", "mejillon",
+            # Otros animales
+            "miel", "gelatina", "carmin", "cochinilla", "e120", "ins 120", "ins120",
+        ]
+        vegano_blocked = any(p in all_text for p in animal_products)
+        vegano_reason = next((f"Contiene {p}" for p in animal_products if p in all_text), None) if vegano_blocked else None
+
+        # ─── VEGETARIANO ─────────────────────────────────────────────────────
+        # Solo sin carne y pescado (lácteos y huevos SÍ son aptos)
+        meat_fish = [
+            "carne", "pollo", "cerdo", "res", "vacuno", "bovino", "porcino", "ovino",
+            "cordero", "pavo", "ave", "jamon", "embutido", "salchicha",
+            "pescado", "atun", "salmon", "anchoa", "sardina", "bacalao", "merluza",
+            "marisco", "camaron", "langosta",
+        ]
+        vegetariano_blocked = any(m in all_text for m in meat_fish)
+        vegetariano_reason = next((f"Contiene {m}" for m in meat_fish if m in all_text), None) if vegetariano_blocked else None
+
+        # ─── SIN GLUTEN / SIN TACC ───────────────────────────────────────────
+        gluten_sources = [
+            "trigo", "cebada", "centeno", "avena", "gluten", "malta",
+            "semola", "semolina", "espelta", "kamut", "farro", "triticale",
+            "tacc",  # término argentino para Trigo/Avena/Cebada/Centeno
+        ]
+        gluten_blocked = any(g in all_text for g in gluten_sources)
+        gluten_reason = next((f"Contiene {g}" for g in gluten_sources if g in all_text), None) if gluten_blocked else None
+
+        # ─── SIN LACTOSA ─────────────────────────────────────────────────────
+        dairy_products = [
+            "leche", "lactosa", "queso", "mantequilla", "manteca", "yogur", "yogurt",
+            "crema", "nata", "suero", "caseinato", "caseina", "lactosuero", "lacteo",
+        ]
+        lactosa_blocked = any(d in all_text for d in dairy_products)
+        lactosa_reason = next((f"Contiene {d}" for d in dairy_products if d in all_text), None) if lactosa_blocked else None
+
+        # ─── SIN FRUTOS SECOS ────────────────────────────────────────────────
+        # Incluye maní/cacahuate (técnicamente legumbre pero tratada como fruto seco en alergias)
+        nuts = [
+            "almendra", "nuez", "avellana", "pistacho", "anacardo", "macadamia",
+            "pecan", "castana", "mani", "cacahuate", "cacahuete",
+        ]
+        nuts_blocked = any(n in all_text for n in nuts)
+        nuts_reason = next((f"Contiene {n}" for n in nuts if n in all_text), None) if nuts_blocked else None
+
         return {
             "success": True,
             "restrictions": {
-                "vegano": {
-                    "apto": not vegano_blocked,
-                    "motivo": "Contiene productos animales" if vegano_blocked else None
-                },
-                "vegetariano": {
-                    "apto": not vegetariano_blocked,
-                    "motivo": "Contiene carne/pescado" if vegetariano_blocked else None
-                },
-                "sin_gluten": {
-                    "apto": not gluten_blocked,
-                    "motivo": "Contiene gluten" if gluten_blocked else None
-                },
-                "sin_lactosa": {
-                    "apto": not lactosa_blocked,
-                    "motivo": "Contiene lácteos" if lactosa_blocked else None
-                },
-                "sin_frutos_secos": {
-                    "apto": not nuts_blocked,
-                    "motivo": "Contiene frutos secos" if nuts_blocked else None
-                }
+                "vegano":          {"apto": not vegano_blocked,       "motivo": vegano_reason},
+                "vegetariano":     {"apto": not vegetariano_blocked,  "motivo": vegetariano_reason},
+                "sin_gluten":      {"apto": not gluten_blocked,       "motivo": gluten_reason},
+                "sin_lactosa":     {"apto": not lactosa_blocked,      "motivo": lactosa_reason},
+                "sin_frutos_secos":{"apto": not nuts_blocked,         "motivo": nuts_reason},
             },
-            "confidence": 0.8,
+            "confidence": 0.82,
             "method": "local_classification"
         }
     
     def _classify_additives_only(self, allergen_warnings: str) -> Dict:
         """
-        Clasificación cuando solo hay aditivos
+        Clasificación cuando solo hay aditivos.
+        Aún así revisa advertencias de alérgenos, que son críticas.
         """
+        # Incluso sin ingredientes base, las advertencias de alérgenos son importantes
+        if allergen_warnings and allergen_warnings.strip():
+            logger.info("⚠️ Solo aditivos pero hay advertencias de alérgenos, analizando...")
+            result = self._classify_local_fast([], allergen_warnings)
+            result["method"] = "additives_with_allergen_check"
+            return result
+
         return {
             "success": True,
             "restrictions": {
@@ -499,6 +752,43 @@ JSON RESPUESTA:
             "method": "additives_only"
         }
     
+    def _apply_known_facts_override(self, result: Dict, ingredients: List[str], allergen_warnings: str) -> Dict:
+        """
+        Safety net post-clasificación: corrige posibles alucinaciones de Gemini
+        para los aditivos de origen animal listados en _KNOWN_ANIMAL_ADDITIVES.
+
+        Si Gemini marcó 'vegano: true' pero la lista contiene 'carmin', 'caseinato', etc.,
+        este método fuerza la corrección antes de devolver la respuesta al cliente.
+
+        También cubre el fallback local (_classify_local_fast), por lo que actúa
+        como doble red de seguridad para cualquier camino de ejecución.
+        """
+        if not result.get("success"):
+            return result  # No tocar resultados de error
+
+        all_text = self._normalize_text(" ".join(ingredients) + " " + (allergen_warnings or ""))
+        restrictions = result.get("restrictions", {})
+        overrides_applied = []
+
+        for additive_key, affected_restrictions in self._KNOWN_ANIMAL_ADDITIVES.items():
+            if additive_key in all_text:
+                for restriction in affected_restrictions:
+                    if restriction in restrictions:
+                        current = restrictions[restriction]
+                        # Solo corregir si Gemini dijo incorrectamente "apto: true"
+                        if current.get("apto") is True:
+                            restrictions[restriction] = {
+                                "apto": False,
+                                "motivo": f"Contiene {additive_key} (origen animal)"
+                            }
+                            overrides_applied.append(f"{restriction}←{additive_key}")
+
+        if overrides_applied:
+            logger.warning(f"🔒 Overrides aplicados por aditivos conocidos: {overrides_applied}")
+
+        result["restrictions"] = restrictions
+        return result
+
     def _create_error_response(self, error_type: str, message: str) -> Dict:
         """
         Crea respuesta de error estandarizada

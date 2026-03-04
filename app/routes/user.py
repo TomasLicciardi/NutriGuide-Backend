@@ -135,7 +135,7 @@ async def forgot_password(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     # Crear token temporal para resetear contraseña
-    reset_token = create_access_token({"sub": user.id})
+    reset_token = create_access_token({"sub": str(user.id)})
 
     # Armar cuerpo del email
     body = f"""
@@ -187,21 +187,20 @@ async def reset_password(request: Request, db: Session = Depends(get_db)):
     return {"mensaje": "Contraseña restablecida correctamente"}
 
 @router.get("/{user_id}")
-async def obtener_usuario(user_id: int, db: Session = Depends(get_db)):
+async def obtener_usuario(user_id: int, token: str = Depends(JWTBearer()), db: Session = Depends(get_db)):
     """
-    Obtiene los detalles de un usuario por su ID.
-
-    Args:
-        user_id (int): ID del usuario.
-        db (Session): Sesión de la base de datos.
-
-    Returns:
-        User: Detalles del usuario encontrado.
+    Obtiene datos públicos de un usuario por su ID.
+    Requiere autenticación. No expone datos sensibles.
     """
     usuario = get_user_by_id(db, user_id)
     if not usuario:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return usuario
+    # Solo retornar campos seguros (nunca el hash de contraseña)
+    return {
+        "id": usuario.id,
+        "username": usuario.username,
+        "email": usuario.email
+    }
 
 @router.post("/")
 async def crear_usuario(request: Request, db: Session = Depends(get_db)):

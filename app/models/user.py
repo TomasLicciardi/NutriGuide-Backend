@@ -1,6 +1,7 @@
 # app/models/user.py
-from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy import Column, Integer, String, Text, DateTime
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from app.database.connection import Base
 from app.utils.security import verify_password
 import json
@@ -13,7 +14,10 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)  
     password = Column(String, nullable=False)
     restrictions = Column(Text, default="[]")
+    reset_token = Column(String, nullable=True)          # token temporal para recuperar contraseña
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # uselist=False correcto: History es un contenedor único por usuario (unique=True en user_id)
     history = relationship("History", back_populates="user", uselist=False)
 
     def get_restrictions(self):

@@ -51,7 +51,23 @@ class EmbeddingService:
         except Exception as e:
             logger.error(f"Error generando embedding de consulta: {e}")
             return None
-    
+
+    def generate_embedding_sync(self, text: str) -> Optional[List[float]]:
+        """
+        Genera embedding síncrono para un texto.
+        Usar en contextos no-async (inicialización, store functions).
+        """
+        try:
+            result = genai.embed_content(
+                model=f"models/{self.model_name}",
+                content=text,
+                task_type="retrieval_document"
+            )
+            return result['embedding']
+        except Exception as e:
+            logger.error(f"Error generando embedding síncronamente: {e}")
+            return None
+
     def cosine_similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
         """
         Calcula la similitud coseno entre dos embeddings
@@ -143,8 +159,8 @@ class EmbeddingService:
         try:
             # Crear texto descriptivo para el embedding
             text_for_embedding = f"{ingredient.name} {ingredient.original_name} {ingredient.type.value}"
-            
-            embedding = self.generate_embedding(text_for_embedding)
+
+            embedding = self.generate_embedding_sync(text_for_embedding)
             if embedding:
                 ingredient.embedding = json.dumps(embedding)
                 db.commit()
@@ -153,7 +169,7 @@ class EmbeddingService:
         except Exception as e:
             logger.error(f"Error almacenando embedding del ingrediente {ingredient.id}: {e}")
             return False
-    
+
     def store_rag_document_embedding(self, document: RAGContextDocument, db: Session) -> bool:
         """
         Genera y almacena el embedding de un documento RAG
@@ -161,8 +177,8 @@ class EmbeddingService:
         try:
             # Usar título y contenido para generar el embedding
             text_for_embedding = f"{document.title} {document.content}"
-            
-            embedding = self.generate_embedding(text_for_embedding)
+
+            embedding = self.generate_embedding_sync(text_for_embedding)
             if embedding:
                 document.embedding = json.dumps(embedding)
                 db.commit()

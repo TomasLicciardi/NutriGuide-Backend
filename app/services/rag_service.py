@@ -21,35 +21,42 @@ class RAGService:
     
     def initialize_rag_knowledge_base(self, db: Session):
         """
-        Inicializa la base de conocimiento RAG con documentos generales y escalables
+        Inicializa la base de conocimiento RAG. Si ya existe pero le faltan
+        documentos (por actualizaciones del código), los agrega sin borrar los existentes.
         """
         try:
-            # Verificar si ya existe conocimiento
+            knowledge_documents = self._get_predefined_knowledge()
+            expected_count = len(knowledge_documents)
+
             existing_docs = db.query(RAGContextDocument).count()
-            if existing_docs > 0:
+            if existing_docs >= expected_count:
                 logger.info("Base de conocimiento RAG ya inicializada")
                 return
-            
-            # Crear documentos predefinidos
-            knowledge_documents = self._get_predefined_knowledge()
-            
+
+            # Obtener títulos ya existentes para no duplicar
+            existing_titles = {
+                row[0] for row in db.query(RAGContextDocument.title).all()
+            }
+            added = 0
             for doc_data in knowledge_documents:
+                if doc_data["title"] in existing_titles:
+                    continue  # Ya existe, saltar
+
                 document = RAGContextDocument(
                     title=doc_data["title"],
                     content=doc_data["content"],
                     document_type=doc_data["type"],
-                    relevance=doc_data["relevance"]
+                    relevance_score=doc_data["relevance"]
                 )
-                
                 db.add(document)
-                db.flush()  # Para obtener el ID
-                
-                # Generar y almacenar embedding
+                db.flush()
                 embedding_service.store_rag_document_embedding(document, db)
-            
+                added += 1
+
             db.commit()
-            logger.info(f"Base de conocimiento RAG inicializada con {len(knowledge_documents)} documentos")
-            
+            if added > 0:
+                logger.info(f"RAG: {added} documentos nuevos agregados (total esperado: {expected_count})")
+
         except Exception as e:
             logger.error(f"Error inicializando base de conocimiento RAG: {e}")
             db.rollback()
@@ -179,37 +186,79 @@ class RAGService:
     
     def _quick_classify_ingredient(self, ingredient_name: str) -> Tuple[IngredientType, float]:
         """
-        Clasificación rápida usando heurísticas simples sin embeddings
+        Clasificación rápida BASE/ADITIVO con soporte para etiquetas argentinas:
+        - Códigos INS (Argentina) y E (Europa)
+        - Abreviaturas funcionales argentinas (EMU:, ACI:, ARO:, etc.)
+        - Keywords comunes en etiquetas LATAM
         """
-        ingredient_lower = ingredient_name.lower().strip()
-        
-        # Palabras clave para aditivos (clasificación rápida)
-        additive_keywords = [
-            'emulsificante', 'emulsionante', 'estabilizante', 'conservador', 'conservante',
-            'acidulante', 'antioxidante', 'aromatizante', 'colorante', 'espesante',
-            'regulador', 'potenciador', 'edulcorante', 'lecitina'
-        ]
-        
-        # Verificar códigos E
         import re
+        import unicodedata
+
+        def normalize(text: str) -> str:
+            return ''.join(
+                c for c in unicodedata.normalize('NFD', text)
+                if unicodedata.category(c) != 'Mn'
+            ).lower().strip()
+
+        ingredient_lower = normalize(ingredient_name)
+
+        # ── Códigos INS (Argentina/LATAM) ───────────────────────────────────
+        if re.match(r'^ins\s*\d{3,4}[a-z]*$', ingredient_lower):
+            return IngredientType.ADITIVO, 0.97
+
+        # ── Códigos E (Europa) ──────────────────────────────────────────────
         if re.match(r'^e\d{3,4}[a-z]*$', ingredient_lower):
             return IngredientType.ADITIVO, 0.95
-        
-        # Verificar palabras clave de aditivos
-        for keyword in additive_keywords:
+
+        # ── Prefijos funcionales argentinos (EMU:, ACI:, ARO:, etc.) ────────
+        # Indica que lo que sigue es un aditivo funcional
+        arg_prefixes = ['emu', 'aci', 'aro', 'con', 'col', 'est', 'res', 'sec', 'hum', 'rai', 'esp']
+        for prefix in arg_prefixes:
+            if ingredient_lower.startswith(prefix + ':') or ingredient_lower.startswith(prefix + ' :'):
+                return IngredientType.ADITIVO, 0.95
+
+        # ── Palabras clave de función tecnológica ───────────────────────────
+        additive_function_keywords = [
+            'emulsificante', 'emulsionante', 'estabilizante', 'conservador', 'conservante',
+            'acidulante', 'antioxidante', 'aromatizante', 'colorante', 'espesante',
+            'regulador de acidez', 'potenciador de sabor', 'resaltador de sabor',
+            'edulcorante', 'gelificante', 'humectante', 'antiaglutinante',
+            'mejorador de harina', 'leudante', 'secuestrante', 'gasificante',
+        ]
+        for keyword in additive_function_keywords:
             if keyword in ingredient_lower:
-                return IngredientType.ADITIVO, 0.9
-        
-        # Patrones específicos comunes
-        if any(term in ingredient_lower for term in ['ácido', 'goma', 'sulfato', 'fosfato']):
-            return IngredientType.ADITIVO, 0.85
-        
-        # Si contiene vitaminas/minerales pero es lista larga, probablemente aditivo
-        if 'vitamina' in ingredient_lower and len(ingredient_lower) > 50:
-            return IngredientType.ADITIVO, 0.8
-        
-        # Por defecto: BASE (más conservador y común)
-        return IngredientType.BASE, 0.7
+                return IngredientType.ADITIVO, 0.92
+
+        # ── Aditivos comunes por nombre ──────────────────────────────────────
+        named_additives = [
+            'lecitina', 'bicarbonato', 'tartrato', 'citrato', 'benzoato',
+            'sorbato', 'propionato', 'sulfito', 'nitrito', 'nitrato',
+            'glutamato', 'inosinato', 'guanilato', 'ribonucleotido',
+            'carragenina', 'carragenano', 'alginato', 'pectina',
+            'goma xantica', 'goma guar', 'goma arabiga', 'goma tara',
+            'maltodextrina', 'dextrina', 'almidon modificado',
+            'tbhq', 'bha', 'bht', 'edta', 'tocoferol',
+            'acido citrico', 'acido lactico', 'acido acetico', 'acido ascorbico',
+            'acido fosforico', 'acido sorbico', 'acido tartarico',
+            'caramelo', 'annatto', 'curcuma',  # colorantes comunes
+            'carmin', 'cochinilla',  # colorante animal (importante para veganos)
+            'vanillina', 'vainillina',  # aromatizantes artificiales
+            'fosfato', 'sulfato', 'carbonato', 'cloruro de sodio',
+            'oxido de zinc', 'fumarato', 'niacinamida', 'riboflavina',
+            'tiamina', 'acido folico', 'vitamina',  # vitaminas como aditivos
+        ]
+        for additive in named_additives:
+            if additive in ingredient_lower:
+                return IngredientType.ADITIVO, 0.88
+
+        # ── Patrones químicos genéricos ──────────────────────────────────────
+        chemical_patterns = ['acido ', 'goma ', 'sulfato', 'fosfato', 'nitrato',
+                              'carbonato', 'cloruro', 'oxido', 'hidrolizado']
+        if any(p in ingredient_lower for p in chemical_patterns):
+            return IngredientType.ADITIVO, 0.83
+
+        # ── Por defecto: BASE (más conservador) ─────────────────────────────
+        return IngredientType.BASE, 0.70
     
     def _get_predefined_knowledge(self) -> List[Dict]:
         """
@@ -355,6 +404,97 @@ PRINCIPIO: Ante la duda sobre origen, aplicar precaución según restricción
 """,
                 "type": "especiales",
                 "relevance": 0.8
+            },
+            {
+                "title": "Colorantes en Etiquetas Argentinas (INS 100-199)",
+                "content": """
+COLORANTES EN ETIQUETAS ARGENTINAS POR ORIGEN:
+
+ORIGEN VEGETAL O MINERAL → APTOS PARA VEGANOS:
+- INS 100 / Curcumina: pigmento de cúrcuma (vegetal)
+- INS 101 / Riboflavina: vitamina B2, sintética o de levadura
+- INS 140 / Clorofila: pigmento vegetal verde
+- INS 141 / Complejos cúpricos de clorofila: vegetal
+- INS 150a,b,c,d / Caramelo: azúcar quemada (vegetal), APTO
+- INS 160a / Beta-caroteno: zanahoria o síntesis, APTO
+- INS 160b / Annatto, Achiote, Bixina, Norbixina: semillas de achiote, APTO
+- INS 160c / Oleorresina de pimentón: pimiento, APTO
+- INS 160d / Licopeno: tomate, APTO
+- INS 161b / Luteína: caléndula, APTO
+- INS 162 / Rojo de remolacha, Betanina: remolacha, APTO
+- INS 163 / Antocianinas: frutas rojas/moradas, APTO
+- INS 170 / Carbonato de calcio: mineral, APTO
+
+ORIGEN SINTÉTICO → APTOS PARA TODAS LAS RESTRICCIONES:
+- INS 102 / Tartrazina: amarillo artificial, APTO
+- INS 110 / Amarillo Ocaso FCF, Amarillo N°6: naranja artificial, APTO
+- INS 122 / Azorrubina, Carmoisina: rojo artificial, APTO
+- INS 123 / Amaranto: rojo artificial, APTO
+- INS 124 / Ponceau 4R: rojo artificial, APTO
+- INS 127 / Eritrosina: rosa/rojo artificial, APTO
+- INS 129 / Rojo Allura AC, Rojo N°40: rojo artificial, APTO
+- INS 131 / Azul Patentado V: azul artificial, APTO
+- INS 132 / Indigotina, Índigo Carmín: azul artificial, APTO
+- INS 133 / Azul Brillante FCF, Azul N°1: azul artificial, APTO
+- INS 142 / Verde Sólido FCF: verde artificial, APTO
+- INS 151 / Negro Brillante BN: negro artificial, APTO
+
+ORIGEN ANIMAL → NO APTOS PARA VEGANOS:
+- INS 120 / Carmín, Ácido Carmínico, Cochinilla: insecto hembra (Dactylopius coccus)
+  → NO VEGANO. Puede aparecer como: E120, rojo cochinilla, colorante natural rojo
+- INS 441 / Gelatina: colágeno de huesos/piel animal → NO VEGANO, NO VEGETARIANO
+- INS 904 / Shellac, Goma laca: secreción de insecto → NO VEGANO
+
+REGLA: Si la etiqueta dice solo "colorante natural rojo" sin código → posible carmín → dudoso para veganos.
+""",
+                "type": "colorantes",
+                "relevance": 0.95
+            },
+            {
+                "title": "Aditivos Sintéticos Seguros para las 5 Restricciones",
+                "content": """
+ESTOS ADITIVOS SON SEGUROS PARA VEGANO, VEGETARIANO, SIN GLUTEN, SIN LACTOSA Y SIN FRUTOS SECOS:
+
+PRESERVANTES (INS 200-283) — todos sintéticos:
+- INS 200-203 / Ácido sórbico y Sorbatos
+- INS 210-213 / Ácido benzoico y Benzoatos
+- INS 220-228 / Dióxido de azufre y Sulfitos
+- INS 234 / Nisina: péptido de fermentación bacteriana
+- INS 280-283 / Ácido propiónico y Propionatos
+
+ANTIOXIDANTES (INS 300-321) — sintéticos o vegetales:
+- INS 300-304 / Ácido ascórbico (Vitamina C) y Ascorbatos
+- INS 306-309 / Tocoferoles (Vitamina E)
+- INS 319 / TBHQ, INS 320 / BHA, INS 321 / BHT
+
+ACIDULANTES Y SALES (INS 330-341):
+- INS 270 / Ácido láctico: fermentación industrial (no de lactosuero)
+- INS 330-333 / Ácido cítrico y Citratos
+- INS 334-337 / Ácido tartárico y Tartratos
+- INS 338-341 / Ácido fosfórico y Fosfatos
+
+EMULSIFICANTES DE ORIGEN VEGETAL:
+- INS 400-407 / Alginatos y Carragenina: algas marinas
+- INS 410 / Goma garrofín, INS 412 / Goma guar, INS 414 / Goma arábiga
+- INS 415 / Goma xántica, INS 440 / Pectinas
+- INS 471 / Monoglicéridos: en Argentina origen vegetal por defecto
+
+SALES MINERALES (INS 500-580):
+- INS 500-504 / Carbonatos/Bicarbonatos, INS 551-559 / Silicatos
+
+POTENCIADORES (INS 620-635):
+- INS 621 / Glutamato monosódico, INS 627/631/635 / Nucleótidos
+
+EDULCORANTES (INS 950-969):
+- INS 950 / Acesulfame K, INS 951 / Aspartamo, INS 955 / Sucralosa
+- INS 960 / Stevia (esteviol), INS 965 / Maltitol, INS 967 / Xilitol
+
+IMPORTANTE: Almidones modificados (INS 1400-1442) pueden ser de TRIGO.
+- 'Almidón modificado de maíz/mandioca/papa' → APTO sin gluten
+- 'Almidón modificado' sin especificar fuente → dudoso para sin_gluten
+""",
+                "type": "aditivos_sinteticos",
+                "relevance": 0.95
             }
         ]
 
@@ -379,7 +519,7 @@ class IntelligentIngredientClassifier:
         try:
             # 1. Buscar ingredientes similares ya clasificados
             similar_ingredients = embedding_service.find_similar_ingredients(
-                ingredient_name, db, top_k=3
+                ingredient_name, db, threshold=0.85
             )
             
             # Si hay alta similitud, usar esa clasificación
