@@ -3,19 +3,19 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Boolean, Float, Text
 from sqlalchemy.orm import relationship
 from app.database.connection import Base
 
+
 class ProductIngredient(Base):
     __tablename__ = "product_ingredients"
 
     id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    ingredient_id = Column(Integer, ForeignKey("ingredients.id"), nullable=False)
-    detected_name = Column(String, nullable=False)  # Nombre como apareció en la etiqueta
-    is_base_ingredient = Column(Boolean, default=True)  # Si es ingrediente base o aditivo
-    affects_classification = Column(Boolean, default=True)  # Si afecta la clasificación final
-    source = Column(String, default="gemini_ocr")  # Fuente de detección
-    confidence = Column(Float, default=1.0)  # Confianza en la detección
-    notes = Column(Text, nullable=True)  # Notas adicionales
-    
-    # Relaciones
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id"), nullable=True)
+    detected_name = Column(String, nullable=False)
+    name_en = Column(String, nullable=True)
+    is_base_ingredient = Column(Boolean, default=True)
+    resolved_by = Column(String, nullable=True)
+    confidence = Column(Float, default=0.0)
+    evidence_json = Column(Text, nullable=True)
+
     product = relationship("Product", back_populates="product_ingredients")
     ingredient = relationship("Ingredient", back_populates="product_ingredients")

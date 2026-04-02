@@ -23,12 +23,11 @@ class RestrictionResultSchema(BaseModel):
     motivo: Optional[str] = None
 
 class ClassificationSchema(BaseModel):
-    """Clasificación completa de las cinco restricciones"""
-    vegano: RestrictionResultSchema
-    vegetariano: RestrictionResultSchema
-    sin_gluten: RestrictionResultSchema
+    """Clasificación completa de las 4 restricciones"""
+    sin_tacc: RestrictionResultSchema
     sin_lactosa: RestrictionResultSchema
     sin_frutos_secos: RestrictionResultSchema
+    vegano: RestrictionResultSchema
 
 class IngredientSchema(BaseModel):
     """Esquema para un ingrediente"""

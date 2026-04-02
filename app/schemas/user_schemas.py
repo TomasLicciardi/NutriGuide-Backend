@@ -2,7 +2,7 @@ from pydantic import BaseModel, EmailStr, validator
 from typing import Optional, List
 
 # Restricciones soportadas por el sistema
-SUPPORTED_RESTRICTIONS = ["vegano", "vegetariano", "sin_gluten", "sin_lactosa", "sin_frutos_secos"]
+SUPPORTED_RESTRICTIONS = ["sin_tacc", "sin_lactosa", "sin_frutos_secos", "vegano"]
 
 class UserBase(BaseModel):
     email: EmailStr

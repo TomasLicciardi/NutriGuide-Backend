@@ -1,26 +1,16 @@
 # app/services/deterministic_classifier.py
 """
-Clasificador determinista de ingredientes para restricciones dietéticas.
+Clasificador determinista de ingredientes — Tier 1 del pipeline multi-fuente.
 
-CAPA 1 del sistema híbrido de NutriGuide. Solo maneja lo que puede resolver
-con certeza absoluta, sin IA. Todo lo demás se delega a la cadena inteligente
-(DB → embeddings → RAG + Gemini → aprendizaje).
+4 restricciones: sin_tacc, sin_lactosa, sin_frutos_secos, vegano.
 
-Lo que SÍ resuelve este módulo:
-  - Códigos INS/E (datos factuales)
-  - Keywords de restricción (leche, huevo, trigo, carne, etc.)
-  - Safe compounds (evitar falsos positivos: nuez moscada, maltodextrina, etc.)
-  - Base mínima (~15 ingredientes ultra-comunes: agua, sal, azúcar)
+Solo resuelve lo que puede afirmar con certeza absoluta:
+  - Keywords directas (trigo, leche, almendra, carne...)
+  - Safe compounds (evitar falsos positivos: ácido láctico, nuez moscada...)
+  - Códigos INS/E con origen conocido
+  - Ingredientes universalmente seguros (agua, sal, azúcar...)
 
-Lo que NO resuelve (se delega a la cadena inteligente):
-  - Aditivos (colorantes, vitaminas, conservantes, emulsionantes)
-  - Ingredientes base poco comunes (frutilla, cúrcuma, cacao, etc.)
-  - Nombres técnicos (BHA, TBHQ, eritorbato, etc.)
-
-Prioridades de clasificación del producto:
-  1. Ingredientes (keywords) → NO APTO si matchea
-  2. Declaraciones positivas (SIN TACC, etc.) → override a APTO
-  3. Advertencias de alérgenos (CONTIENE / PUEDE CONTENER) → override final a NO APTO
+Todo lo demás se delega a los Tiers 2-5 del pipeline.
 """
 
 import re
@@ -29,30 +19,23 @@ import logging
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
-from app.utils.allergen_parser import AllergenParseResult, POSITIVE_DECLARATION_MAP
-
 logger = logging.getLogger(__name__)
 
-ALL_RESTRICTIONS = ["vegano", "vegetariano", "sin_gluten", "sin_lactosa", "sin_frutos_secos"]
+ALL_RESTRICTIONS = ["sin_tacc", "sin_lactosa", "sin_frutos_secos", "vegano"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CAPA 1 — Keywords por restricción
-# ═══════════════════════════════════════════════════════════════════════════════
-# Si un ingrediente normalizado contiene alguna de estas substrings,
-# se marca como NO APTO para esa restricción.
-# Estas son las ÚNICAS reglas hardcodeadas del sistema.
+# Keywords por restricción
 # ═══════════════════════════════════════════════════════════════════════════════
 
 RESTRICTION_KEYWORDS: Dict[str, List[str]] = {
-    "sin_gluten": [
+    "sin_tacc": [
         "trigo", "avena", "cebada", "centeno",
         "gluten", "tacc",
         "malta", "semolina", "semola", "espelta", "kamut",
         "triticale", "farro", "cuscus", "bulgur", "seitan",
-        "harina 000",
+        "harina 000", "harina 0000",
     ],
-
     "sin_lactosa": [
         "leche", "lactosa", "queso", "yogur", "yogurt",
         "mantequilla", "manteca",
@@ -62,15 +45,14 @@ RESTRICTION_KEYWORDS: Dict[str, List[str]] = {
         "proteina de leche", "proteinas lacteas",
         "solidos de leche", "grasa de leche",
     ],
-
     "sin_frutos_secos": [
         "almendra", "nuez", "avellana", "pistacho",
         "anacardo", "macadamia", "pecan", "castana",
         "mani", "cacahuate", "cacahuete",
         "fruto seco", "frutos secos",
     ],
-
     "vegano": [
+        # Lácteos
         "leche", "lactosa", "queso", "yogur", "yogurt",
         "mantequilla", "manteca",
         "crema", "nata",
@@ -78,7 +60,9 @@ RESTRICTION_KEYWORDS: Dict[str, List[str]] = {
         "requeson", "ricota", "dulce de leche",
         "proteina de leche", "proteinas lacteas",
         "solidos de leche", "grasa de leche",
-        "huevo", "albumina", "ovoalbumina", "yema",
+        # Huevo
+        "huevo", "albumina", "ovoalbumina", "yema", "lisozima",
+        # Carne / pescado
         "carne", "pollo", "cerdo", "vacuno", "vacuna", "bovino", "bovina",
         "porcino", "porcina", "ovino", "ovina", "cordero", "pavo",
         "aviar", "primer jugo",
@@ -88,63 +72,47 @@ RESTRICTION_KEYWORDS: Dict[str, List[str]] = {
         "bacalao", "merluza", "trucha", "surimi",
         "marisco", "camaron", "langosta", "mejillon",
         "calamar", "pulpo",
+        # Otros animales
         "miel", "propoleo", "jalea real", "cera de abeja",
         "gelatina",
         "carmin", "cochinilla",
-        "grasa animal", "sebo",
-    ],
-
-    "vegetariano": [
-        "carne", "pollo", "cerdo", "vacuno", "vacuna", "bovino", "bovina",
-        "porcino", "porcina", "ovino", "ovina", "cordero", "pavo",
-        "aviar", "primer jugo",
-        "jamon", "salchicha", "embutido", "panceta", "tocino",
-        "charqui", "bondiola", "chorizo", "morcilla",
-        "pescado", "atun", "salmon", "anchoa", "sardina",
-        "bacalao", "merluza", "trucha", "surimi",
-        "marisco", "camaron", "langosta", "mejillon",
-        "calamar", "pulpo",
-        "gelatina",
         "grasa animal", "sebo",
     ],
 }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CAPA 2 — Compuestos seguros (evitan falsos positivos CRÍTICOS)
+# Safe compounds — evitar falsos positivos
 # ═══════════════════════════════════════════════════════════════════════════════
 
 SAFE_COMPOUNDS: Dict[str, List[str]] = {
-    "sin_gluten": [
+    "sin_tacc": [
         "maltodextrina",
         "dextrina",
     ],
     "sin_lactosa": [
-        "leche de coco",  "leche de almendra", "leche de soja",
-        "leche de avena", "leche de arroz",     "leche vegetal",
+        "leche de coco", "leche de almendra", "leche de soja",
+        "leche de avena", "leche de arroz", "leche vegetal",
         "manteca de cacao", "manteca de mani",
-        "crema de cacao",   "crema de mani",    "crema de leche de coco",
-        "acido lactico",    "lactato",
+        "crema de cacao", "crema de mani", "crema de leche de coco",
+        "acido lactico", "lactato",
     ],
     "vegano": [
-        "leche de coco",  "leche de almendra", "leche de soja",
-        "leche de avena", "leche de arroz",     "leche vegetal",
+        "leche de coco", "leche de almendra", "leche de soja",
+        "leche de avena", "leche de arroz", "leche vegetal",
         "manteca de cacao", "manteca de mani",
-        "crema de cacao",   "crema de mani",    "crema de leche de coco",
-        "acido lactico",    "lactato",
+        "crema de cacao", "crema de mani", "crema de leche de coco",
+        "acido lactico", "lactato",
         "gelatina vegetal", "gelatina de agar", "agar agar",
     ],
     "sin_frutos_secos": [
         "nuez moscada",
         "moscada",
     ],
-    "vegetariano": [
-        "gelatina vegetal", "gelatina de agar", "agar agar",
-    ],
 }
 
 UNSAFE_OVERRIDES: Dict[str, List[str]] = {
-    "sin_gluten": [
+    "sin_tacc": [
         "maltodextrina de trigo",
         "dextrina de trigo",
         "almidon de trigo",
@@ -155,16 +123,16 @@ UNSAFE_OVERRIDES: Dict[str, List[str]] = {
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CAPA 3 — Base de datos de códigos INS/E
+# Códigos INS/E que afectan restricciones
 # ═══════════════════════════════════════════════════════════════════════════════
 
-INS_AFFECTS_RESTRICTIONS: Dict[int, Dict[str, str]] = {
-    120:  {"vegano": "carmin/cochinilla (insecto)"},
-    441:  {"vegano": "gelatina animal", "vegetariano": "gelatina animal"},
-    542:  {"vegano": "fosfato de hueso", "vegetariano": "fosfato de hueso"},
-    901:  {"vegano": "cera de abejas"},
-    904:  {"vegano": "shellac/goma laca (insecto)"},
-    966:  {"sin_lactosa": "lactitol (derivado de lactosa)"},
+INS_AFFECTS: Dict[int, Dict[str, str]] = {
+    120: {"vegano": "carmín/cochinilla (origen insecto)"},
+    441: {"vegano": "gelatina (origen animal)"},
+    542: {"vegano": "fosfato de hueso (origen animal)"},
+    901: {"vegano": "cera de abejas"},
+    904: {"vegano": "shellac/goma laca (origen insecto)"},
+    966: {"sin_lactosa": "lactitol (derivado de lactosa)"},
 }
 
 _SAFE_INS_RANGES = [
@@ -174,22 +142,20 @@ _SAFE_INS_RANGES = [
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CAPA 4 — Base mínima de ingredientes universales
-# ═══════════════════════════════════════════════════════════════════════════════
-# SOLO los ingredientes que aparecen en >80% de los productos y son
-# obviamente seguros. Todo lo demás se resuelve por la cadena inteligente.
+# Ingredientes universalmente seguros
 # ═══════════════════════════════════════════════════════════════════════════════
 
 ESSENTIAL_SAFE: frozenset = frozenset([
     "agua", "sal", "azucar", "aceite", "aceite de girasol",
     "aceite de oliva", "aceite vegetal", "aceite de palma",
     "aceite de soja", "aceite de maiz",
-    "maiz", "arroz", "vinagre",
+    "maiz", "arroz", "vinagre", "almidon de maiz",
+    "fecula de maiz", "almidon modificado",
 ])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Clasificación BASE / ADITIVO (solo para display)
+# Clasificación BASE / ADITIVO
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _ADDITIVE_KEYWORDS = [
@@ -212,239 +178,207 @@ _ADDITIVE_CHEMICAL_PATTERNS = [
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Dataclasses de resultado
+# Dataclasses
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @dataclass
-class IngredientClassification:
+class IngredientResult:
     name: str
     name_normalized: str
-    tipo: str                                  # "BASE" o "ADITIVO"
-    restrictions_affected: Dict[str, str]      # {restriccion: keyword_que_triggereo}
-    status: str = "known"                      # "known" | "unknown" | "needs_ai"
-    confidence: float = 0.95
-    resolved_by: str = "deterministic"         # "deterministic" | "db" | "embedding" | "rag_gemini" | "default"
+    category: str  # "BASE" | "ADITIVO"
+    is_tacc_safe: Optional[bool] = None
+    is_lactose_safe: Optional[bool] = None
+    is_nut_safe: Optional[bool] = None
+    is_vegan_safe: Optional[bool] = None
+    confidence: float = 0.0
+    resolved_by: str = "unresolved"
+    evidence: List[str] = field(default_factory=list)
 
 
 @dataclass
-class ProductClassification:
-    success: bool = True
-    restrictions: Dict[str, dict] = field(default_factory=dict)
-    classified_ingredients: List[IngredientClassification] = field(default_factory=list)
-    unknown_ingredients: List[str] = field(default_factory=list)
-    confidence: float = 0.95
-    method: str = "deterministic"
+class Tier1Result:
+    """Resultado completo del Tier 1 para todos los ingredientes."""
+    resolved: Dict[str, IngredientResult] = field(default_factory=dict)
+    unresolved: List[str] = field(default_factory=list)
     stats: Dict[str, int] = field(default_factory=lambda: {
-        "total": 0,
-        "by_deterministic": 0,
-        "by_ins_code": 0,
-        "by_essential_safe": 0,
-        "needs_ai": 0,
+        "total": 0, "by_keyword": 0, "by_ins": 0, "by_safe": 0, "unresolved": 0,
     })
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Clase principal
+# Clasificador
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class DeterministicClassifier:
 
     @staticmethod
-    def _normalize(text: str) -> str:
+    def normalize(text: str) -> str:
         nfkd = unicodedata.normalize("NFD", text)
         return "".join(c for c in nfkd if unicodedata.category(c) != "Mn").lower().strip()
 
     @staticmethod
     def _extract_ins_code(text_normalized: str) -> Optional[int]:
-        match = re.search(r"\bins\s*(\d{3,4})\b", text_normalized)
-        if match:
-            return int(match.group(1))
-        match = re.match(r"^e(\d{3,4})[a-z]?$", text_normalized)
-        if match:
-            return int(match.group(1))
+        m = re.search(r"\bins\s*(\d{3,4})\b", text_normalized)
+        if m:
+            return int(m.group(1))
+        m = re.match(r"^e(\d{3,4})[a-z]?$", text_normalized)
+        if m:
+            return int(m.group(1))
         return None
 
-    @staticmethod
-    def _is_ins_in_safe_range(code: int) -> bool:
-        return any(lo <= code <= hi for lo, hi in _SAFE_INS_RANGES)
-
-    def classify_base_or_additive(self, ingredient_normalized: str) -> str:
-        if self._extract_ins_code(ingredient_normalized) is not None:
+    def _classify_category(self, norm: str) -> str:
+        if self._extract_ins_code(norm) is not None:
             return "ADITIVO"
-        prefixes = ["emu", "aci", "aro", "con", "col", "est", "rai", "sec", "hum", "esp"]
-        for prefix in prefixes:
-            if ingredient_normalized.startswith(prefix + ":") or ingredient_normalized.startswith(prefix + " :"):
-                return "ADITIVO"
-        if any(kw in ingredient_normalized for kw in _ADDITIVE_KEYWORDS):
+        if any(kw in norm for kw in _ADDITIVE_KEYWORDS):
             return "ADITIVO"
-        if any(p in ingredient_normalized for p in _ADDITIVE_CHEMICAL_PATTERNS):
+        if any(p in norm for p in _ADDITIVE_CHEMICAL_PATTERNS):
             return "ADITIVO"
         return "BASE"
 
-    # ── Clasificación de un ingrediente ──────────────────────────────────
+    def classify_ingredient(self, ingredient_name: str) -> IngredientResult:
+        """Clasifica un ingrediente individual con reglas deterministas."""
+        norm = self.normalize(ingredient_name)
+        category = self._classify_category(norm)
 
-    def classify_ingredient(self, ingredient_name: str) -> IngredientClassification:
-        norm = self._normalize(ingredient_name)
-        tipo = self.classify_base_or_additive(norm)
-        affected: Dict[str, str] = {}
+        result = IngredientResult(
+            name=ingredient_name,
+            name_normalized=norm,
+            category=category,
+        )
 
-        # ── 1. Código INS/E → resolución inmediata ──
+        # --- Código INS/E ---
         ins_code = self._extract_ins_code(norm)
         if ins_code is not None:
-            if ins_code in INS_AFFECTS_RESTRICTIONS:
-                for restriction, reason in INS_AFFECTS_RESTRICTIONS[ins_code].items():
-                    affected[restriction] = reason
-            return IngredientClassification(
-                name=ingredient_name, name_normalized=norm, tipo="ADITIVO",
-                restrictions_affected=affected, status="known",
-                confidence=0.97, resolved_by="ins_code",
-            )
+            result.is_tacc_safe = True
+            result.is_lactose_safe = True
+            result.is_nut_safe = True
+            result.is_vegan_safe = True
 
-        # ── 2. Keywords de restricción + safe compounds ──
-        keyword_matched = False
+            if ins_code in INS_AFFECTS:
+                for restriction, reason in INS_AFFECTS[ins_code].items():
+                    self._set_unsafe(result, restriction, reason)
+
+            if any(lo <= ins_code <= hi for lo, hi in _SAFE_INS_RANGES) or ins_code in INS_AFFECTS:
+                result.confidence = 0.97
+                result.resolved_by = "deterministic_ins"
+                result.evidence.append(f"Código INS {ins_code} identificado")
+                return result
+
+        # --- Keywords + safe compounds ---
+        any_keyword_matched = False
         for restriction in ALL_RESTRICTIONS:
+            # Unsafe overrides primero
             for pattern in UNSAFE_OVERRIDES.get(restriction, []):
                 if pattern in norm:
-                    affected[restriction] = pattern
-                    keyword_matched = True
+                    self._set_unsafe(result, restriction, pattern)
+                    any_keyword_matched = True
                     break
-            if restriction in affected:
+            if self._restriction_is_set(result, restriction) and not self._is_safe(result, restriction):
                 continue
 
+            # Safe compounds
             is_safe_compound = False
             for safe in SAFE_COMPOUNDS.get(restriction, []):
                 if safe in norm:
                     is_safe_compound = True
-                    keyword_matched = True
+                    any_keyword_matched = True
                     break
             if is_safe_compound:
+                self._set_safe(result, restriction)
                 continue
 
+            # Keywords de restricción
             for keyword in RESTRICTION_KEYWORDS.get(restriction, []):
                 if keyword in norm:
-                    affected[restriction] = keyword
-                    keyword_matched = True
+                    self._set_unsafe(result, restriction, keyword)
+                    any_keyword_matched = True
                     break
 
-        if keyword_matched:
-            return IngredientClassification(
-                name=ingredient_name, name_normalized=norm, tipo=tipo,
-                restrictions_affected=affected, status="known",
-                confidence=0.95, resolved_by="deterministic",
-            )
+        if any_keyword_matched:
+            for r in ALL_RESTRICTIONS:
+                if not self._restriction_is_set(result, r):
+                    self._set_safe(result, r)
+            result.confidence = 0.95
+            result.resolved_by = "deterministic_keyword"
+            return result
 
-        # ── 3. Base mínima esencial (agua, sal, azúcar...) ──
+        # --- Ingredientes universalmente seguros ---
         if norm in ESSENTIAL_SAFE:
-            return IngredientClassification(
-                name=ingredient_name, name_normalized=norm, tipo=tipo,
-                restrictions_affected={}, status="known",
-                confidence=0.95, resolved_by="essential_safe",
-            )
+            result.is_tacc_safe = True
+            result.is_lactose_safe = True
+            result.is_nut_safe = True
+            result.is_vegan_safe = True
+            result.confidence = 0.95
+            result.resolved_by = "deterministic_safe"
+            result.evidence.append(f"Ingrediente esencial seguro: '{norm}'")
+            return result
+
         for safe in ESSENTIAL_SAFE:
             if safe in norm and len(safe) >= 4:
-                return IngredientClassification(
-                    name=ingredient_name, name_normalized=norm, tipo=tipo,
-                    restrictions_affected={}, status="known",
-                    confidence=0.90, resolved_by="essential_safe",
-                )
+                result.is_tacc_safe = True
+                result.is_lactose_safe = True
+                result.is_nut_safe = True
+                result.is_vegan_safe = True
+                result.confidence = 0.90
+                result.resolved_by = "deterministic_safe"
+                result.evidence.append(f"Contiene ingrediente seguro: '{safe}'")
+                return result
 
-        # ── 4. No resuelto → necesita cadena inteligente ──
-        return IngredientClassification(
-            name=ingredient_name, name_normalized=norm, tipo=tipo,
-            restrictions_affected={}, status="needs_ai",
-            confidence=0.5, resolved_by="pending",
-        )
+        # --- No resuelto ---
+        return result
 
-    # ── Clasificación completa de un producto ────────────────────────────
+    def classify_batch(self, ingredients: List[str]) -> Tier1Result:
+        """Clasifica un lote de ingredientes, separando resueltos de no-resueltos."""
+        tier1 = Tier1Result()
+        tier1.stats["total"] = len(ingredients)
 
-    def classify_product(
-        self,
-        ingredients: List[str],
-        allergen_result: AllergenParseResult,
-    ) -> ProductClassification:
-        restrictions = {
-            r: {"apto": True, "motivo": None} for r in ALL_RESTRICTIONS
-        }
-
-        classified: List[IngredientClassification] = []
-        unknowns: List[str] = []
-        stats = {"total": 0, "by_deterministic": 0, "by_ins_code": 0,
-                 "by_essential_safe": 0, "needs_ai": 0}
-
-        for ingredient in ingredients:
-            result = self.classify_ingredient(ingredient)
-            classified.append(result)
-            stats["total"] += 1
-
-            if result.status == "needs_ai":
-                unknowns.append(ingredient)
-                stats["needs_ai"] += 1
-            elif result.resolved_by == "ins_code":
-                stats["by_ins_code"] += 1
-            elif result.resolved_by == "essential_safe":
-                stats["by_essential_safe"] += 1
+        for name in ingredients:
+            r = self.classify_ingredient(name)
+            if r.resolved_by != "unresolved":
+                tier1.resolved[name] = r
+                if "ins" in r.resolved_by:
+                    tier1.stats["by_ins"] += 1
+                elif "safe" in r.resolved_by:
+                    tier1.stats["by_safe"] += 1
+                else:
+                    tier1.stats["by_keyword"] += 1
             else:
-                stats["by_deterministic"] += 1
+                tier1.unresolved.append(name)
+                tier1.stats["unresolved"] += 1
 
-            for restriction, keyword in result.restrictions_affected.items():
-                if restrictions[restriction]["apto"]:
-                    restrictions[restriction] = {
-                        "apto": False,
-                        "motivo": f"Contiene {keyword}",
-                    }
-
-        for declaration in allergen_result.declaraciones_positivas:
-            mapped = POSITIVE_DECLARATION_MAP.get(declaration)
-            if mapped and mapped in restrictions:
-                restrictions[mapped] = {"apto": True, "motivo": None}
-
-        for restriction, data in allergen_result.restricciones_afectadas.items():
-            if restriction in restrictions:
-                restrictions[restriction] = {
-                    "apto": False,
-                    "motivo": data["fuente"],
-                }
-
-        confidence = 0.95 if not unknowns else max(0.70, 0.95 - len(unknowns) * 0.03)
-
-        return ProductClassification(
-            success=True,
-            restrictions=restrictions,
-            classified_ingredients=classified,
-            unknown_ingredients=unknowns,
-            confidence=confidence,
-            method="hybrid" if unknowns else "deterministic",
-            stats=stats,
+        logger.info(
+            f"Tier 1: {tier1.stats['total']} ingredientes → "
+            f"{len(tier1.resolved)} resueltos, {len(tier1.unresolved)} pendientes"
         )
+        return tier1
 
-    def apply_external_classification(
-        self,
-        classification: ProductClassification,
-        ingredient_name: str,
-        external_result: Dict[str, bool],
-    ) -> ProductClassification:
-        mapping = {
-            "dairy":        ["sin_lactosa", "vegano"],
-            "egg":          ["vegano"],
-            "meat_fish":    ["vegano", "vegetariano"],
-            "honey_insect": ["vegano"],
-            "gluten":       ["sin_gluten"],
-            "nuts":         ["sin_frutos_secos"],
-        }
+    # --- Helpers internos ---
 
-        for category, is_present in external_result.items():
-            if is_present and category in mapping:
-                for restriction in mapping[category]:
-                    if classification.restrictions[restriction]["apto"]:
-                        classification.restrictions[restriction] = {
-                            "apto": False,
-                            "motivo": f"Contiene {ingredient_name} ({category})",
-                        }
+    @staticmethod
+    def _set_unsafe(result: IngredientResult, restriction: str, reason: str):
+        setattr(result, _RESTRICTION_FIELD[restriction], False)
+        result.evidence.append(f"Determinista: '{reason}' → no apto {restriction}")
 
-        if ingredient_name in classification.unknown_ingredients:
-            classification.unknown_ingredients.remove(ingredient_name)
+    @staticmethod
+    def _set_safe(result: IngredientResult, restriction: str):
+        if getattr(result, _RESTRICTION_FIELD[restriction]) is None:
+            setattr(result, _RESTRICTION_FIELD[restriction], True)
 
-        return classification
+    @staticmethod
+    def _restriction_is_set(result: IngredientResult, restriction: str) -> bool:
+        return getattr(result, _RESTRICTION_FIELD[restriction]) is not None
+
+    @staticmethod
+    def _is_safe(result: IngredientResult, restriction: str) -> bool:
+        return getattr(result, _RESTRICTION_FIELD[restriction]) is True
+
+
+_RESTRICTION_FIELD = {
+    "sin_tacc": "is_tacc_safe",
+    "sin_lactosa": "is_lactose_safe",
+    "sin_frutos_secos": "is_nut_safe",
+    "vegano": "is_vegan_safe",
+}
 
 
 classifier = DeterministicClassifier()

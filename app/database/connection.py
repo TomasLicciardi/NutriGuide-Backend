@@ -40,7 +40,7 @@ def init_database():
         open(db_path, 'a').close()
 
     # Importar modelos para que SQLAlchemy los registre
-    from app.models import user, history, product, ingredient, product_ingredient, rag_context
+    from app.models import user, history, product, ingredient, product_ingredient
 
     # Crear tablas si no existen
     inspector = inspect(engine)
