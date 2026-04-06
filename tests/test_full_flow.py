@@ -24,9 +24,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.utils.allergen_parser import parse_allergen_text
 from app.services.deterministic_classifier import (
-    classifier, DeterministicClassifier, IngredientClassification,
-    ProductClassification, ALL_RESTRICTIONS,
+    DeterministicClassifier, ALL_RESTRICTIONS,
 )
+
+classifier = DeterministicClassifier()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECCION A: Precision base con los 42 tests
@@ -217,40 +218,35 @@ def run_section_b():
         errors = []
 
         if "expect_nuez_safe" in case:
-            nuez_affected = "sin_frutos_secos" in result.restrictions_affected
-            if nuez_affected:
+            nut_safe = result.is_nut_safe
+            if nut_safe is False:
                 errors.append(f"sin_frutos_secos deberia ser APTO (safe compound)")
         else:
-            vegano_affected = "vegano" in result.restrictions_affected
-            vegetariano_affected = "vegetariano" in result.restrictions_affected
+            vegano_affected = (result.is_vegan_safe is False)
+            expect_vegano = case["expect_vegano_affected"]
 
-            if vegano_affected != case["expect_vegano_affected"]:
+            if vegano_affected != expect_vegano:
                 errors.append(
-                    f"vegano: esperado={'AFECTA' if case['expect_vegano_affected'] else 'NO AFECTA'}, "
+                    f"vegano: esperado={'AFECTA' if expect_vegano else 'NO AFECTA'}, "
                     f"obtenido={'AFECTA' if vegano_affected else 'NO AFECTA'}"
-                )
-            if vegetariano_affected != case["expect_vegetariano_affected"]:
-                errors.append(
-                    f"vegetariano: esperado={'AFECTA' if case['expect_vegetariano_affected'] else 'NO AFECTA'}, "
-                    f"obtenido={'AFECTA' if vegetariano_affected else 'NO AFECTA'}"
                 )
 
         if errors:
             failed += 1
             print(f"  [FAIL] {case['desc']}")
             print(f"         Ingrediente: \"{case['ingredient']}\"")
-            print(f"         Restricciones afectadas: {result.restrictions_affected}")
+            print(f"         resolved_by: {result.resolved_by}")
             for err in errors:
                 print(f"         {err}")
         else:
             passed += 1
             extras = ""
-            if result.restrictions_affected:
-                extras = f" -> afecta: {list(result.restrictions_affected.keys())}"
-            elif result.status == "needs_ai":
-                extras = " -> needs_ai (sin keywords)"
+            if result.is_vegan_safe is False:
+                extras = " -> no vegano"
+            elif result.resolved_by == "unresolved":
+                extras = " -> unresolved (necesita Tier 2+)"
             else:
-                extras = " -> seguro (safe compound o essential)"
+                extras = " -> seguro"
             print(f"  [OK]   {case['desc']}{extras}")
 
     print(f"\n  Resultado: {passed}/{len(VEGAN_VS_VEGETARIAN_CASES)} distinciones correctas")
@@ -318,11 +314,10 @@ PIPELINE_PRODUCTS = [
         ],
         "allergens": "CONTIENE LECHE.",
         "expected": {
-            "vegano": False,
-            "vegetariano": False,
-            "sin_gluten": True,
+            "sin_tacc": True,
             "sin_lactosa": False,
             "sin_frutos_secos": True,
+            "vegano": False,
         },
     },
     {
@@ -341,11 +336,10 @@ PIPELINE_PRODUCTS = [
         ],
         "allergens": "CONTIENE DERIVADOS DE TRIGO Y APIO. PUEDE CONTENER HUEVO, SOJA Y DERIVADOS DE LECHE.",
         "expected": {
-            "vegano": False,
-            "vegetariano": False,
-            "sin_gluten": False,
+            "sin_tacc": False,
             "sin_lactosa": False,
             "sin_frutos_secos": True,
+            "vegano": False,
         },
     },
     {
@@ -358,11 +352,10 @@ PIPELINE_PRODUCTS = [
         ],
         "allergens": "",
         "expected": {
-            "vegano": False,
-            "vegetariano": False,
-            "sin_gluten": True,
+            "sin_tacc": True,
             "sin_lactosa": True,
             "sin_frutos_secos": True,
+            "vegano": False,
         },
     },
     {
@@ -375,11 +368,10 @@ PIPELINE_PRODUCTS = [
         ],
         "allergens": "CONTIENE DERIVADOS DE TRIGO.",
         "expected": {
-            "vegano": True,
-            "vegetariano": True,
-            "sin_gluten": False,
+            "sin_tacc": False,
             "sin_lactosa": True,
             "sin_frutos_secos": True,
+            "vegano": True,
         },
     },
     {
@@ -394,11 +386,10 @@ PIPELINE_PRODUCTS = [
         ],
         "allergens": "CONTIENE DERIVADOS DE TRIGO Y SOJA.",
         "expected": {
-            "vegano": True,
-            "vegetariano": True,
-            "sin_gluten": False,
+            "sin_tacc": False,
             "sin_lactosa": True,
             "sin_frutos_secos": True,
+            "vegano": True,
         },
     },
     {
@@ -411,137 +402,61 @@ PIPELINE_PRODUCTS = [
         ],
         "allergens": "",
         "expected": {
-            "vegano": False,
-            "vegetariano": False,
-            "sin_gluten": True,
+            "sin_tacc": True,
             "sin_lactosa": True,
             "sin_frutos_secos": True,
+            "vegano": False,
         },
     },
 ]
 
 
 def run_section_c():
+    from app.services.consensus_engine import ConsensusEngine, IngredientVerdict
+    from app.utils.allergen_parser import AllergenParseResult
+
+    consensus_engine = ConsensusEngine()
+
     print("\n" + "=" * 80)
-    print(" SECCION C: Simulacion de pipeline COMPLETO (cold start -> aprendizaje)")
+    print(" SECCION C: Simulacion de pipeline (Tier 1 + Alergenos + Consenso)")
     print("=" * 80)
-    print(" Simula: Determinista -> DB lookup -> Embeddings -> Gemini -> Aprender")
 
-    simulated_db: Dict[str, Dict[str, bool]] = {}
-
-    total_ingredients = 0
-    total_deterministic = 0
-    total_ins = 0
-    total_essential = 0
-    total_from_db = 0
-    total_from_embedding = 0
-    total_gemini = 0
     all_verdicts_correct = True
     total_verdicts = 0
     correct_verdicts = 0
 
     for product in PIPELINE_PRODUCTS:
         allergen_result = parse_allergen_text(product["allergens"])
-        classification = classifier.classify_product(
-            product["ingredients"], allergen_result,
-        )
+        tier1 = classifier.classify_batch(product["ingredients"])
 
-        from_db = []
-        from_embedding = []
-        from_gemini = []
+        verdicts = []
+        for name in product["ingredients"]:
+            if name in tier1.resolved:
+                r = tier1.resolved[name]
+            else:
+                r = classifier.classify_ingredient(name)
+            verdicts.append(IngredientVerdict(
+                name_es=r.name, name_en="", category=r.category,
+                is_tacc_safe=r.is_tacc_safe, is_lactose_safe=r.is_lactose_safe,
+                is_nut_safe=r.is_nut_safe, is_vegan_safe=r.is_vegan_safe,
+                confidence=r.confidence, resolved_by=r.resolved_by,
+                evidence=r.evidence[:],
+            ))
 
-        for ing in classification.classified_ingredients:
-            if ing.status == "needs_ai":
-                norm = ing.name_normalized
-
-                # Nivel 1: DB lookup exacto
-                if norm in simulated_db:
-                    from_db.append((ing.name, simulated_db[norm]))
-                    gemini_resp = simulated_db[norm]
-                    ing.resolved_by = "db"
-                    ing.status = "known"
-                    ing.confidence = 0.92
-
-                # Nivel 2: embedding similarity (buscar keys similares)
-                else:
-                    embedding_match = None
-                    for db_key, db_val in simulated_db.items():
-                        if _simple_similarity(norm, db_key) > 0.7:
-                            embedding_match = (db_key, db_val)
-                            break
-
-                    if embedding_match:
-                        from_embedding.append((ing.name, embedding_match[0]))
-                        gemini_resp = embedding_match[1]
-                        ing.resolved_by = "embedding"
-                        ing.status = "known"
-                        ing.confidence = 0.88
-
-                    # Nivel 3: Gemini fallback
-                    elif norm in SIMULATED_GEMINI_RESPONSES:
-                        gemini_resp = SIMULATED_GEMINI_RESPONSES[norm]
-                        from_gemini.append(ing.name)
-                        ing.resolved_by = "rag_gemini"
-                        ing.status = "known"
-                        ing.confidence = 0.85
-                        simulated_db[norm] = gemini_resp
-                    else:
-                        gemini_resp = {"dairy": False, "egg": False, "meat_fish": False,
-                                       "honey_insect": False, "gluten": False, "nuts": False}
-                        from_gemini.append(ing.name)
-                        ing.resolved_by = "default"
-                        ing.status = "known"
-                        ing.confidence = 0.60
-                        simulated_db[norm] = gemini_resp
-
-                classifier.apply_external_classification(
-                    classification, ing.name, gemini_resp,
-                )
-
-        total_ingredients += classification.stats["total"]
-        total_deterministic += classification.stats["by_deterministic"]
-        total_ins += classification.stats["by_ins_code"]
-        total_essential += classification.stats["by_essential_safe"]
-        total_from_db += len(from_db)
-        total_from_embedding += len(from_embedding)
-        total_gemini += len(from_gemini)
+        pv = consensus_engine.build_product_verdict(verdicts, allergen_result, [])
 
         print(f"\n{'~' * 80}")
         print(f"  {product['id']}: {product['desc']}")
         print(f"{'~' * 80}")
-        print(f"  Ingredientes totales: {classification.stats['total']}")
-        print(f"    Determinista (keywords): {classification.stats['by_deterministic']}")
-        print(f"    INS codes:              {classification.stats['by_ins_code']}")
-        print(f"    Base esencial:          {classification.stats['by_essential_safe']}")
-        print(f"    DB lookup (aprendido):  {len(from_db)}")
-        print(f"    Embedding (similar):    {len(from_embedding)}")
-        print(f"    Gemini (IA):            {len(from_gemini)}")
+        print(f"  Ingredientes: {tier1.stats['total']} "
+              f"(INS: {tier1.stats['by_ins']}, keywords: {tier1.stats['by_keyword']}, "
+              f"safe: {tier1.stats['by_safe']}, unresolved: {tier1.stats['unresolved']})")
 
-        if from_db:
-            print(f"\n    Resueltos por DB (aprendizaje previo):")
-            for name, _ in from_db:
-                print(f"      [DB]        \"{name}\"")
-
-        if from_embedding:
-            print(f"\n    Resueltos por embedding (similitud semantica):")
-            for name, matched_key in from_embedding:
-                print(f"      [EMBEDDING] \"{name}\" ~ \"{matched_key}\"")
-
-        if from_gemini:
-            print(f"\n    Resueltos por Gemini (llamada IA):")
-            for name in from_gemini:
-                norm = _normalize(name)
-                resp = simulated_db.get(norm, {})
-                flags = [k for k, v in resp.items() if v]
-                flag_str = ", ".join(flags) if flags else "todo seguro"
-                print(f"      [GEMINI]    \"{name}\" -> {flag_str} -> GUARDADO EN DB")
-
-        r = classification.restrictions
         print(f"\n    Veredicto final:")
         product_ok = True
         for rest in ALL_RESTRICTIONS:
             expected_apto = product["expected"][rest]
-            actual_apto = r[rest]["apto"]
+            actual_apto = pv.restrictions[rest]["apto"]
             ok = expected_apto == actual_apto
             total_verdicts += 1
             if ok:
@@ -553,31 +468,18 @@ def run_section_c():
             status = "APTO" if actual_apto else "NO APTO"
             expected_str = "APTO" if expected_apto else "NO APTO"
             marker = "OK" if ok else "FAIL"
-            motivo = f" ({r[rest]['motivo']})" if r[rest].get('motivo') else ""
+            motivo = f" ({pv.restrictions[rest]['motivo']})" if pv.restrictions[rest].get('motivo') else ""
             print(f"      [{marker}] {rest:20s} = {status:8s} (esperado: {expected_str}){motivo}")
 
         if not product_ok:
             print(f"    !! VEREDICTO INCORRECTO en este producto")
 
-    # Resumen
-    print(f"\n{'=' * 80}")
-    print(f" RESUMEN PIPELINE ({len(PIPELINE_PRODUCTS)} productos, {total_ingredients} ingredientes)")
-    print(f"{'=' * 80}")
-    print(f"  Por determinista (keywords): {total_deterministic:>3}")
-    print(f"  Por INS codes:               {total_ins:>3}")
-    print(f"  Por base esencial:           {total_essential:>3}")
-    print(f"  Por DB (aprendizaje):        {total_from_db:>3}")
-    print(f"  Por embedding (similitud):   {total_from_embedding:>3}")
-    print(f"  Por Gemini (IA):             {total_gemini:>3}")
-    print(f"{'~' * 80}")
-    print(f"  Ingredientes en DB al final: {len(simulated_db):>3}")
-    print(f"  Llamadas Gemini reales:      {total_gemini:>3}")
-    print(f"  Llamadas ahorradas (DB+emb): {total_from_db + total_from_embedding:>3}")
-    print(f"{'~' * 80}")
     pct = 100 * correct_verdicts / total_verdicts if total_verdicts else 0
-    print(f"  Veredictos correctos: {correct_verdicts}/{total_verdicts} ({pct:.1f}%)")
+    print(f"\n{'=' * 80}")
+    print(f" RESUMEN: {correct_verdicts}/{total_verdicts} veredictos correctos ({pct:.1f}%)")
+    print(f"{'=' * 80}")
     if all_verdicts_correct:
-        print(f"  TODOS LOS VEREDICTOS DEL PIPELINE SON CORRECTOS")
+        print(f"  TODOS LOS VEREDICTOS SON CORRECTOS")
     else:
         print(f"  !! Hay veredictos incorrectos")
 

@@ -35,6 +35,10 @@ RESTRICTION_KEYWORDS: Dict[str, List[str]] = {
         "malta", "semolina", "semola", "espelta", "kamut",
         "triticale", "farro", "cuscus", "bulgur", "seitan",
         "harina 000", "harina 0000",
+        # Patrones argentinos expandidos
+        "harina enriquecida",  # Siempre es de trigo en Argentina
+        "extracto de malta",   # Malta = cebada
+        "fideos",  # En Argentina, fideos = harina de trigo salvo indicación contraria
     ],
     "sin_lactosa": [
         "leche", "lactosa", "queso", "yogur", "yogurt",
@@ -44,12 +48,20 @@ RESTRICTION_KEYWORDS: Dict[str, List[str]] = {
         "requeson", "ricota", "dulce de leche",
         "proteina de leche", "proteinas lacteas",
         "solidos de leche", "grasa de leche",
+        # Expandido para dataset argentino
+        "cultivos lacticos", "cultivo lactico",  # Yogures, postres lácteos
+        "suero de queso",
+        "leche en polvo",
+        "leche descremada",
+        "leche entera",
     ],
     "sin_frutos_secos": [
         "almendra", "nuez", "avellana", "pistacho",
         "anacardo", "macadamia", "pecan", "castana",
         "mani", "cacahuate", "cacahuete",
         "fruto seco", "frutos secos",
+        # Expandido
+        "nueces",  # Plural
     ],
     "vegano": [
         # Lácteos
@@ -60,6 +72,11 @@ RESTRICTION_KEYWORDS: Dict[str, List[str]] = {
         "requeson", "ricota", "dulce de leche",
         "proteina de leche", "proteinas lacteas",
         "solidos de leche", "grasa de leche",
+        "cultivos lacticos", "cultivo lactico",
+        "suero de queso",
+        "leche en polvo",
+        "leche descremada",
+        "leche entera",
         # Huevo
         "huevo", "albumina", "ovoalbumina", "yema", "lisozima",
         # Carne / pescado
@@ -73,10 +90,13 @@ RESTRICTION_KEYWORDS: Dict[str, List[str]] = {
         "marisco", "camaron", "langosta", "mejillon",
         "calamar", "pulpo",
         # Otros animales
-        "miel", "propoleo", "jalea real", "cera de abeja",
+        "miel", "propoleo", "jalea real",
+        "cera de abeja", "cera de abejas",  # Con y sin plural
         "gelatina",
         "carmin", "cochinilla",
         "grasa animal", "sebo",
+        "grasa bovina", "grasa vacuna",
+        "colageno", "colageno hidrolizado",
     ],
 }
 
@@ -89,6 +109,13 @@ SAFE_COMPOUNDS: Dict[str, List[str]] = {
     "sin_tacc": [
         "maltodextrina",
         "dextrina",
+        # Almidones que NO son de trigo (cuando se especifica origen)
+        "almidon de maiz", "almidon de papa", "almidon de mandioca",
+        "almidon de arroz", "almidon de tapioca",
+        "fecula de maiz", "fecula de papa", "fecula de mandioca",
+        "almidon modificado de maiz",
+        # Harinas sin gluten
+        "harina de maiz", "harina de arroz", "harina de mandioca",
     ],
     "sin_lactosa": [
         "leche de coco", "leche de almendra", "leche de soja",
@@ -96,6 +123,9 @@ SAFE_COMPOUNDS: Dict[str, List[str]] = {
         "manteca de cacao", "manteca de mani",
         "crema de cacao", "crema de mani", "crema de leche de coco",
         "acido lactico", "lactato",
+        # Compuestos con "lact" que NO son lactosa
+        "estearoil lactilato",  # INS 481i — emulsionante sintético
+        "lactilato de sodio",
     ],
     "vegano": [
         "leche de coco", "leche de almendra", "leche de soja",
@@ -104,10 +134,21 @@ SAFE_COMPOUNDS: Dict[str, List[str]] = {
         "crema de cacao", "crema de mani", "crema de leche de coco",
         "acido lactico", "lactato",
         "gelatina vegetal", "gelatina de agar", "agar agar",
+        # Compuestos con "lact" que NO son de origen animal
+        "estearoil lactilato",
+        "lactilato de sodio",
+        # Aceites/grasas de nombre engañoso
+        "aceite de palma",  # Vegetal
+        "aceite vegetal",
+        "grasa vegetal",
+        # Cera vegetal (no confundir con cera de abejas)
+        "cera de carnauba",
     ],
     "sin_frutos_secos": [
         "nuez moscada",
         "moscada",
+        # Coco NO es fruto seco (es drupa)
+        "coco", "leche de coco", "aceite de coco",
     ],
 }
 
@@ -118,6 +159,7 @@ UNSAFE_OVERRIDES: Dict[str, List[str]] = {
         "almidon de trigo",
         "almidon modificado de trigo",
         "gluten de trigo",
+        "fibra de trigo",
     ],
 }
 
@@ -127,13 +169,45 @@ UNSAFE_OVERRIDES: Dict[str, List[str]] = {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 INS_AFFECTS: Dict[int, Dict[str, str]] = {
+    # Colorantes de origen animal
     120: {"vegano": "carmín/cochinilla (origen insecto)"},
+    # Gelatina
     441: {"vegano": "gelatina (origen animal)"},
+    # Derivados óseos
     542: {"vegano": "fosfato de hueso (origen animal)"},
+    # Ceras animales
     901: {"vegano": "cera de abejas"},
     904: {"vegano": "shellac/goma laca (origen insecto)"},
+    # Derivados de lactosa
     966: {"sin_lactosa": "lactitol (derivado de lactosa)"},
 }
+
+# Códigos INS que son SEGUROS para TODAS las restricciones
+# (aditivos sintéticos/vegetales/minerales comunes en etiquetas ARG)
+_SAFE_INS_CODES: frozenset = frozenset([
+    # Conservantes
+    200, 202, 211, 250, 251, 270, 282,
+    # Antioxidantes
+    300, 316, 320, 321,
+    # Reguladores / acidulantes
+    330, 331, 341,
+    # Espesantes / estabilizantes / emulsionantes
+    400, 407, 410, 412, 415, 422, 440, 452, 460, 461, 471, 481,
+    # Leudantes / gasificantes / antiaglutinantes
+    500, 503, 516, 536, 551,
+    # Resaltadores de sabor
+    621, 631, 627,
+    # Colorantes vegetales/sintéticos comunes
+    100, 101, 102, 110, 129, 133, 150, 160, 171,
+    # Edulcorantes
+    950, 951, 952, 955, 960,
+    # Mejoradores
+    920, 928,
+    # Agentes de recubrimiento vegetales
+    903,  # Cera de carnauba (vegetal)
+    # Secuestrantes
+    385,
+])
 
 _SAFE_INS_RANGES = [
     (200, 283), (300, 341), (400, 499),
@@ -146,11 +220,104 @@ _SAFE_INS_RANGES = [
 # ═══════════════════════════════════════════════════════════════════════════════
 
 ESSENTIAL_SAFE: frozenset = frozenset([
-    "agua", "sal", "azucar", "aceite", "aceite de girasol",
+    # Bases
+    "agua", "sal", "azucar", "vinagre",
+    # Aceites vegetales
+    "aceite", "aceite de girasol", "aceite de girasol alto oleico",
     "aceite de oliva", "aceite vegetal", "aceite de palma",
-    "aceite de soja", "aceite de maiz",
-    "maiz", "arroz", "vinagre", "almidon de maiz",
-    "fecula de maiz", "almidon modificado",
+    "aceite de soja", "aceite de maiz", "aceite de canola",
+    "aceite vegetal de palma", "aceite vegetal de palma y canola",
+    "aceite vegetal fraccionado",
+    # Cereales sin gluten
+    "maiz", "arroz", "harina de maiz",
+    # Almidones / féculas
+    "almidon de maiz", "almidon de papa", "almidon de mandioca",
+    "almidon modificado", "almidon modificado de maiz",
+    "fecula de maiz", "fecula de papa", "fecula de mandioca",
+    # Azúcares y edulcorantes
+    "jarabe de glucosa", "jarabe de maiz", "jarabe de maiz de alta fructosa",
+    "maltodextrina", "dextrosa", "fructosa",
+    # Verduras y frutas
+    "tomate", "cebolla", "ajo", "zanahoria", "zapallo",
+    "perejil", "apio", "pimiento", "papa",
+    "manzana", "naranja", "limon", "durazno", "frutilla",
+    "pasas de uva", "fruta escurrida", "pulpa de durazno",
+    "jugo de tomates", "tomate pelado", "extracto de tomate",
+    "concentrado doble de tomate", "jugo concentrado de limon",
+    "jugo concentrado de naranja",
+    # Especias y hierbas (todas veganas, sin gluten, sin lactosa)
+    "especias", "pimienta", "pimienta negra", "pimienta roja",
+    "curcuma", "canela", "comino", "oregano", "tomillo",
+    "romero", "laurel", "jengibre", "clavo de olor", "aji molido",
+    "canela en polvo", "laurel en polvo", "ajo en polvo",
+    "cebolla en polvo",
+    # Cacao (sin leche)
+    "cacao", "cacao en polvo", "cacao alcalinizado",
+    # Fermentos y levaduras
+    "levadura", "extracto de levadura",
+    # Vinagres
+    "vinagre de alcohol", "vinagre de vino", "vinagre de manzana",
+    # Tubérculos y raíces
+    "mandioca", "tapioca",
+    # Otros ingredientes base comunes
+    "poroto de soja", "proteina de soja", "proteina de maiz",
+    "hidrolizado de proteina de maiz",
+    "mostaza blanca", "semilla de apio",
+    "cloruro de potasio", "cloruro de sodio",
+    "vainilla", "oleomargarina",
+    # ═══════════════════════════════════════════════════════════════
+    # Aditivos alimentarios comunes — seguros para las 4 restricciones
+    # Identificados por evaluación formal contra ground truth (n=44)
+    # ═══════════════════════════════════════════════════════════════
+    # Acidulantes / reguladores de acidez
+    "acido citrico", "acido lactico", "acido fosforico",
+    "acido sorbico", "acido ascorbico",
+    # Conservantes
+    "sorbato de potasio", "benzoato de sodio",
+    "propionato de calcio", "nitrito de sodio", "nitrato de sodio",
+    "eritorbato de sodio",
+    # Leudantes / gasificantes
+    "bicarbonato de sodio", "bicarbonato de amonio",
+    "pirofosfato acido de sodio",
+    # Espesantes / estabilizantes / gelificantes
+    "goma xantica", "goma guar", "goma garrofin",
+    "carragenina", "pectina", "polifosfatos",
+    # Emulsionantes
+    "lecitina de soja", "mono y digliceridos de acidos grasos",
+    # Antioxidantes
+    "bha", "bht", "tbhq",
+    # Secuestrantes
+    "edta disodico calcico",
+    # Colorantes vegetales / sinteticos
+    "tartrazina", "amarillo ocaso", "amarillo ocaso fcf",
+    "azul brillante fcf", "rojo allura ac",
+    "caramelo", "caramelo iii", "caramelo iv",
+    "annatto", "rocu", "clorofila",
+    "dioxido de titanio",
+    # Edulcorantes
+    "aspartamo", "acesulfame k", "sucralosa",
+    "ciclamato de sodio", "glicosidos de esteviol",
+    # Resaltadores de sabor
+    "glutamato monosodico", "glutamato de sodio",
+    "inosinato disodico", "inosinato de sodio",
+    "guanilato disodico",
+    # Antiaglutinantes
+    "dioxido de silicio", "fosfato tricalcico",
+    # Aromatizantes (genéricos — sin origen animal)
+    "aromatizante", "aromatizantes", "aromatizantes naturales",
+    "aromatizantes artificiales", "aromatizante humo",
+    "aromatizante identico al natural",
+    "aromatizante artificial a chocolate",
+    "aromatizante natural a mostaza",
+    "saborizante natural, identico al natural y artificial",
+    # Vitaminas y minerales
+    "vitamina a", "vitamina b1", "vitamina b2", "vitamina b6",
+    "vitamina b9", "vitamina b12", "vitamina c", "vitamina d",
+    "vitaminas y minerales", "acido folico",
+    "tiamina", "riboflavina", "niacina", "nicotinamida",
+    "fumarato ferroso", "sulfato ferroso", "sulfato de zinc",
+    "oxido de zinc", "pirofosfato ferrico", "hierro", "zinc",
+    "yodato de potasio",
 ])
 
 
@@ -218,10 +385,10 @@ class DeterministicClassifier:
 
     @staticmethod
     def _extract_ins_code(text_normalized: str) -> Optional[int]:
-        m = re.search(r"\bins\s*(\d{3,4})\b", text_normalized)
+        m = re.search(r"\bins\s*(\d{3,4})[a-z]*\b", text_normalized)
         if m:
             return int(m.group(1))
-        m = re.match(r"^e(\d{3,4})[a-z]?$", text_normalized)
+        m = re.match(r"^e(\d{3,4})[a-z]*$", text_normalized)
         if m:
             return int(m.group(1))
         return None
@@ -258,7 +425,7 @@ class DeterministicClassifier:
                 for restriction, reason in INS_AFFECTS[ins_code].items():
                     self._set_unsafe(result, restriction, reason)
 
-            if any(lo <= ins_code <= hi for lo, hi in _SAFE_INS_RANGES) or ins_code in INS_AFFECTS:
+            if ins_code in _SAFE_INS_CODES or any(lo <= ins_code <= hi for lo, hi in _SAFE_INS_RANGES) or ins_code in INS_AFFECTS:
                 result.confidence = 0.97
                 result.resolved_by = "deterministic_ins"
                 result.evidence.append(f"Código INS {ins_code} identificado")

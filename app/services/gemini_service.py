@@ -5,6 +5,9 @@ Servicio Gemini para NutriGuide.
 Responsabilidades:
   1. OCR: Extraer ingredientes + alérgenos de imágenes de etiquetas
   2. Fallback (Tier 5): Clasificar ingredientes desconocidos con las 4 restricciones
+
+OPTIMIZACIÓN v2.1: Tier 5 usa clasificación BATCH (1 sola llamada para N ingredientes)
+en lugar de N llamadas individuales. Fallback a individual si el batch falla.
 """
 
 import os
@@ -97,11 +100,24 @@ class GeminiService:
         """
         Clasifica ingredientes desconocidos como último recurso.
         Recibe lista de {"name_es": ..., "name_en": ...}.
+
+        OPTIMIZACIÓN: envía TODOS los ingredientes en UNA sola llamada
+        a Gemini en lugar de una llamada por ingrediente.
         """
         if not ingredients:
             return {}
 
-        results: Dict[str, GeminiFallbackResult] = {}
+        # Intentar clasificación batch (1 sola llamada a Gemini)
+        results = await self._classify_batch(ingredients)
+
+        if results is not None:
+            found = sum(1 for r in results.values() if r.origin is not None)
+            logger.info(f"Gemini fallback BATCH: {found}/{len(ingredients)} ingredientes clasificados en 1 llamada")
+            return results
+
+        # Fallback: si el batch falló, intentar uno por uno (comportamiento anterior)
+        logger.warning("Batch fallback falló, usando clasificación individual")
+        results = {}
         for ing in ingredients:
             name_es = ing["name_es"]
             name_en = ing["name_en"]
@@ -109,13 +125,146 @@ class GeminiService:
             results[name_en] = r
 
         found = sum(1 for r in results.values() if r.origin is not None)
-        logger.info(f"Gemini fallback: {found}/{len(ingredients)} ingredientes clasificados")
+        logger.info(f"Gemini fallback individual: {found}/{len(ingredients)} ingredientes clasificados")
         return results
+
+    async def _classify_batch(
+        self, ingredients: List[Dict[str, str]]
+    ) -> Optional[Dict[str, GeminiFallbackResult]]:
+        """
+        Clasifica TODOS los ingredientes desconocidos en una sola llamada a Gemini.
+        Retorna None si la llamada o el parseo fallan (para activar el fallback individual).
+        """
+        try:
+            prompt = self._build_batch_prompt(ingredients)
+
+            # Timeout más generoso para batch (más ingredientes = más texto de respuesta)
+            base_timeout = max(12, 5 + len(ingredients) * 2)
+            retry_timeout = base_timeout + 10
+            response = await self._call_gemini_with_retry(
+                content=[prompt], timeouts=[base_timeout, retry_timeout]
+            )
+
+            if response is None:
+                logger.error("Gemini batch: timeout en todos los intentos")
+                return None
+
+            parsed_list = self._parse_batch_response(response.text, len(ingredients))
+            if parsed_list is None:
+                logger.error(f"Gemini batch: error parseando respuesta. Raw: {response.text[:500]}")
+                return None
+
+            # Mapear cada resultado parseado a su ingrediente original
+            results: Dict[str, GeminiFallbackResult] = {}
+            for i, ing in enumerate(ingredients):
+                name_en = ing["name_en"]
+                result = GeminiFallbackResult(name_en=name_en)
+
+                if i < len(parsed_list) and parsed_list[i] is not None:
+                    parsed = parsed_list[i]
+                    result.origin = parsed.get("origin")
+                    result.function_tag = parsed.get("function")
+                    result.description_es = parsed.get("description_es")
+                    result.is_tacc_safe = not parsed.get("contains_gluten", False)
+                    result.is_lactose_safe = not parsed.get("contains_lactose", False)
+                    result.is_nut_safe = not parsed.get("is_nut", False)
+                    result.is_vegan_safe = not parsed.get("is_animal_derived", False)
+                    result.evidence.append(
+                        f"Gemini batch: origin={result.origin}, function={result.function_tag}"
+                    )
+                else:
+                    result.evidence.append("Gemini batch: ingrediente no incluido en respuesta")
+
+                results[name_en] = result
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Error en Gemini batch classification: {type(e).__name__}: {e}")
+            return None
+
+    @staticmethod
+    def _build_batch_prompt(ingredients: List[Dict[str, str]]) -> str:
+        """Construye el prompt para clasificar múltiples ingredientes en una sola llamada."""
+        ingredient_list = "\n".join(
+            f'{i+1}. "{ing["name_es"]}" (en inglés: "{ing["name_en"]}")'
+            for i, ing in enumerate(ingredients)
+        )
+
+        return f"""Analiza estos {len(ingredients)} ingredientes alimentarios y clasifica CADA UNO.
+
+INGREDIENTES:
+{ingredient_list}
+
+Responde ÚNICAMENTE con un JSON array válido (sin texto extra).
+Cada elemento del array corresponde a un ingrediente en el MISMO ORDEN de la lista.
+
+Formato de CADA elemento:
+{{
+  "origin": "animal" | "vegetal" | "synthetic" | "mineral" | "unknown",
+  "function": "conservante" | "colorante" | "emulsionante" | "estabilizante" | "acidulante" | "antioxidante" | "edulcorante" | "espesante" | "saborizante" | "otro",
+  "contains_gluten": true/false,
+  "contains_lactose": true/false,
+  "is_nut": true/false,
+  "is_animal_derived": true/false,
+  "description_es": "Breve descripción en español"
+}}
+
+Reglas:
+- "origin": de dónde proviene (animal, vegetal, sintético, mineral)
+- "contains_gluten": true SOLO si deriva de trigo, cebada, centeno o avena
+- "contains_lactose": true SOLO si deriva de leche o lácteos
+- "is_nut": true SOLO si es un fruto seco o maní
+- "is_animal_derived": true si proviene de un animal (incluye lácteos, huevo, carne, miel, insectos)
+- Si no reconoces el ingrediente, usa "unknown" para origin y false para los booleanos
+
+RESPONDE SOLO CON EL JSON ARRAY, SIN TEXTO ADICIONAL:
+[
+  {{...}},
+  {{...}}
+]"""
+
+    @staticmethod
+    def _parse_batch_response(response_text: str, expected_count: int) -> Optional[List[dict]]:
+        """Parsea la respuesta batch de Gemini (JSON array)."""
+        try:
+            # Intentar extraer JSON array de bloque ```json
+            json_match = re.search(r"```json\s*(\[.*?\])\s*```", response_text, re.DOTALL)
+            if json_match:
+                raw = json.loads(json_match.group(1))
+            else:
+                # Intentar parsear directamente como JSON array
+                # Buscar el primer [ y el último ]
+                start = response_text.find("[")
+                end = response_text.rfind("]")
+                if start != -1 and end != -1 and end > start:
+                    raw = json.loads(response_text[start:end + 1])
+                else:
+                    raw = json.loads(response_text)
+
+            if not isinstance(raw, list):
+                logger.error(f"Gemini batch: respuesta no es un array, es {type(raw).__name__}")
+                return None
+
+            if len(raw) != expected_count:
+                logger.warning(
+                    f"Gemini batch: esperaba {expected_count} resultados, recibió {len(raw)}. "
+                    f"Usando los disponibles."
+                )
+
+            return raw
+
+        except Exception as e:
+            logger.error(f"Error parseando respuesta batch: {e}")
+            return None
 
     async def _classify_single(
         self, name_es: str, name_en: str
     ) -> GeminiFallbackResult:
-        """Clasifica un ingrediente individual con Gemini."""
+        """
+        Clasifica un ingrediente individual con Gemini.
+        Se usa como fallback si la clasificación batch falla.
+        """
         result = GeminiFallbackResult(name_en=name_en)
 
         try:
@@ -244,8 +393,7 @@ RESPONDE UNICAMENTE EN JSON VALIDO (sin texto extra):
   "ingredientes_detectados": ["ingrediente1", "ingrediente2", "aditivo1"],
   "alergenos_advertencias": "CONTIENE: GLUTEN. PUEDE CONTENER: SOJA." o null,
   "confidence": 0.95
-}
-"""
+}"""
 
     def _parse_ocr_response(self, response_text: str) -> Dict:
         try:

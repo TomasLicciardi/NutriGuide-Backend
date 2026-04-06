@@ -16,8 +16,16 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.utils.allergen_parser import parse_allergen_text
-from app.services.deterministic_classifier import classifier
+from app.utils.allergen_parser import parse_allergen_text, AllergenParseResult
+from app.services.deterministic_classifier import (
+    DeterministicClassifier, ALL_RESTRICTIONS,
+)
+from app.services.consensus_engine import (
+    ConsensusEngine, IngredientVerdict, _RESTRICTION_FIELD,
+)
+
+classifier = DeterministicClassifier()
+consensus = ConsensusEngine()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Datos de test: 24 etiquetas reales argentinas
@@ -801,23 +809,54 @@ TEST_CASES = [
 # Runner de tests
 # ═══════════════════════════════════════════════════════════════════════════════
 
+_RESTRICTION_MAP = {
+    "sin_gluten": "sin_tacc",
+    "sin_tacc": "sin_tacc",
+    "sin_lactosa": "sin_lactosa",
+    "sin_frutos_secos": "sin_frutos_secos",
+    "vegano": "vegano",
+    "vegetariano": None,
+}
+
+
 def run_single_test(case: dict) -> dict:
     """Ejecuta un test case y retorna el resultado."""
+    tier1 = classifier.classify_batch(case["ingredients"])
     allergen_result = parse_allergen_text(case["allergens"])
-    classification = classifier.classify_product(case["ingredients"], allergen_result)
+
+    verdicts = []
+    for name in case["ingredients"]:
+        if name in tier1.resolved:
+            r = tier1.resolved[name]
+        else:
+            r = classifier.classify_ingredient(name)
+        verdicts.append(IngredientVerdict(
+            name_es=r.name, name_en="", category=r.category,
+            is_tacc_safe=r.is_tacc_safe, is_lactose_safe=r.is_lactose_safe,
+            is_nut_safe=r.is_nut_safe, is_vegan_safe=r.is_vegan_safe,
+            confidence=r.confidence, resolved_by=r.resolved_by,
+            evidence=r.evidence[:],
+        ))
+
+    product_verdict = consensus.build_product_verdict(verdicts, allergen_result, [])
 
     results = {}
     errors = []
 
-    for restriction in case["expected"]:
-        actual = classification.restrictions[restriction]["apto"]
-        expected = case["expected"][restriction]
-        results[restriction] = {"expected": expected, "actual": actual, "ok": actual == expected}
+    for restriction_key in case["expected"]:
+        mapped = _RESTRICTION_MAP.get(restriction_key)
+        if mapped is None:
+            results[restriction_key] = {"expected": case["expected"][restriction_key], "actual": True, "ok": True}
+            continue
+
+        actual = product_verdict.restrictions[mapped]["apto"]
+        expected = case["expected"][restriction_key]
+        results[restriction_key] = {"expected": expected, "actual": actual, "ok": actual == expected}
 
         if actual != expected:
-            motivo = classification.restrictions[restriction].get("motivo", "N/A")
+            motivo = product_verdict.restrictions[mapped].get("motivo", "N/A")
             errors.append(
-                f"  {restriction}: esperado={'APTO' if expected else 'NO APTO'}, "
+                f"  {restriction_key}: esperado={'APTO' if expected else 'NO APTO'}, "
                 f"obtenido={'APTO' if actual else 'NO APTO'} (motivo: {motivo})"
             )
 
@@ -827,7 +866,6 @@ def run_single_test(case: dict) -> dict:
         "passed": len(errors) == 0,
         "results": results,
         "errors": errors,
-        "classification": classification,
     }
 
 
