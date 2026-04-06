@@ -1,17 +1,18 @@
 # app/services/consensus_engine.py
 """
-Motor de Consenso — Fase 6 del pipeline multi-fuente.
+Motor de Consenso — Fase final del pipeline multi-fuente.
 
-Agrega resultados de los 5 Tiers + texto de alérgenos para producir
+Agrega resultados de 6 fuentes + texto de alérgenos para producir
 un veredicto final ponderado por ingrediente y por restricción.
 
-Pesos:
-  Texto alérgenos:     0.98 (declaración legal del fabricante)
-  Tier 1 Determinista: 0.97 (reglas factuales)
+Fuentes (importadas de config como única fuente de verdad):
+  Texto alérgenos:       0.98 (declaración legal del fabricante)
+  Tier 1 Determinista:   0.97 (reglas factuales)
   Tier 2 Knowledge Base: 0.93 (previamente verificado)
-  Tier 3 Open Food Facts: 0.85 (comunitario)
-  Tier 4 PubChem:      0.75 (identificación química, clasificación inferida)
-  Tier 5 Gemini:       0.65 (puede alucinar)
+  Tier 3 Embedding:      0.88 (similitud semántica con modelo local)
+  Tier 4 Open Food Facts:0.85 (comunitario)
+  Tier 5 PubChem:        0.75 (identificación química)
+  Gemini (del OCR):      0.65 (puede alucinar)
 
 Política: "default unsafe" para restricciones médicas (TACC, lactosa, frutos secos).
 """
@@ -20,18 +21,10 @@ import logging
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
+from app.config.image_analysis_config import TIER_WEIGHTS
 from app.utils.allergen_parser import AllergenParseResult, POSITIVE_DECLARATION_MAP
 
 logger = logging.getLogger(__name__)
-
-TIER_WEIGHTS = {
-    "allergen_text": 0.98,
-    "deterministic": 0.97,
-    "knowledge_base": 0.93,
-    "openfoodfacts": 0.85,
-    "pubchem": 0.75,
-    "gemini": 0.65,
-}
 
 ALL_RESTRICTIONS = ["sin_tacc", "sin_lactosa", "sin_frutos_secos", "vegano"]
 
@@ -82,7 +75,6 @@ class ConsensusEngine:
         """Construye el veredicto final del producto."""
         restrictions = {r: {"apto": True, "motivo": None} for r in ALL_RESTRICTIONS}
 
-        # 1. Acumular restricciones desde ingredientes
         for v in ingredient_verdicts:
             for restriction in ALL_RESTRICTIONS:
                 field_name = _RESTRICTION_FIELD[restriction]
@@ -99,13 +91,11 @@ class ConsensusEngine:
                             "motivo": f"Ingrediente no verificable: {v.name_es}",
                         }
 
-        # 2. Declaraciones positivas del texto de alérgenos (override a APTO)
         for declaration in allergen_result.declaraciones_positivas:
             mapped = POSITIVE_DECLARATION_MAP.get(declaration)
             if mapped and mapped in restrictions:
                 restrictions[mapped] = {"apto": True, "motivo": f"Declaración: {declaration}"}
 
-        # 3. Alérgenos explícitos del texto (override final a NO APTO)
         for restriction, data in allergen_result.restricciones_afectadas.items():
             if restriction in restrictions:
                 restrictions[restriction] = {
@@ -113,11 +103,9 @@ class ConsensusEngine:
                     "motivo": data["fuente"],
                 }
 
-        # 4. Calcular confianza global
         confidences = [v.confidence for v in ingredient_verdicts if v.confidence > 0]
         overall_confidence = min(confidences) if confidences else 0.0
 
-        # 5. Calcular veredicto del usuario
         user_verdict = self._calculate_user_verdict(restrictions, user_restrictions)
 
         return ProductVerdict(
@@ -133,22 +121,32 @@ class ConsensusEngine:
         name_en: str,
         tier1_result=None,
         tier2_result=None,
-        tier3_result=None,
+        tier3_embedding_result=None,
         tier4_result=None,
         tier5_result=None,
+        gemini_result=None,
     ) -> IngredientVerdict:
         """
         Fusiona resultados de múltiples tiers para un solo ingrediente.
         Toma el resultado del tier con mayor peso que haya resuelto cada campo.
+
+        Fuentes en orden de confianza:
+          1. deterministic (tier1)    — 0.97
+          2. knowledge_base (tier2)   — 0.93
+          3. embedding (tier3)        — 0.88
+          4. openfoodfacts (tier4)    — 0.85
+          5. pubchem (tier5)          — 0.75
+          6. gemini (del OCR)         — 0.65
         """
         verdict = IngredientVerdict(name_es=name_es, name_en=name_en, category="BASE")
 
         sources = [
             ("deterministic", tier1_result, TIER_WEIGHTS["deterministic"]),
             ("knowledge_base", tier2_result, TIER_WEIGHTS["knowledge_base"]),
-            ("openfoodfacts", tier3_result, TIER_WEIGHTS["openfoodfacts"]),
-            ("pubchem", tier4_result, TIER_WEIGHTS["pubchem"]),
-            ("gemini", tier5_result, TIER_WEIGHTS["gemini"]),
+            ("embedding", tier3_embedding_result, TIER_WEIGHTS["embedding"]),
+            ("openfoodfacts", tier4_result, TIER_WEIGHTS["openfoodfacts"]),
+            ("pubchem", tier5_result, TIER_WEIGHTS["pubchem"]),
+            ("gemini", gemini_result, TIER_WEIGHTS["gemini"]),
         ]
 
         best_weight = 0.0
@@ -158,18 +156,18 @@ class ConsensusEngine:
             if source_result is None:
                 continue
 
-            # Copiar evidencia
             evidence = getattr(source_result, "evidence", [])
             verdict.evidence.extend(evidence)
 
-            # Categoría (tomar del primer tier que la tenga)
             cat = getattr(source_result, "category", None)
             if cat and verdict.category == "BASE":
                 verdict.category = cat
 
-            # Metadata del tier de mayor peso
             if weight > best_weight:
-                origin = getattr(source_result, "origin", None) or getattr(source_result, "inferred_origin", None)
+                origin = (
+                    getattr(source_result, "origin", None)
+                    or getattr(source_result, "inferred_origin", None)
+                )
                 if origin:
                     verdict.origin = origin
                 fn = getattr(source_result, "function_tag", None)
@@ -179,7 +177,6 @@ class ConsensusEngine:
                 if desc:
                     verdict.description_es = desc
 
-            # Restricciones: para cada una, tomar el tier de mayor peso que la resolvió
             for restriction in ALL_RESTRICTIONS:
                 field_name = _RESTRICTION_FIELD[restriction]
                 current = getattr(verdict, field_name)

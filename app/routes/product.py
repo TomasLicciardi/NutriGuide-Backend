@@ -7,9 +7,9 @@ from app.utils.jwt import JWTBearer, extract_user_id
 from app.schemas.product_schemas import ProductDetail, ImageResponse
 from io import BytesIO
 
-router = APIRouter()  # Removemos el prefix para manejar las rutas completas
+router = APIRouter(prefix="/products", tags=["products"])
 
-@router.get("/products/{id}/image", response_model=None, responses={
+@router.get("/{id}/image", response_model=None, responses={
     200: {
         "content": {"image/jpeg": {}, "image/png": {}, "image/gif": {}, "image/webp": {}},
         "description": "Retorna la imagen del producto",
@@ -63,7 +63,7 @@ async def get_product_image(
         }
     )
 
-@router.get("/{product_id}")
+@router.get("/{product_id}", dependencies=[Depends(JWTBearer())])
 async def obtener_producto(product_id: int, db: Session = Depends(get_db)):
     """
     Obtiene los detalles de un producto por su ID.
@@ -87,7 +87,7 @@ async def obtener_producto(product_id: int, db: Session = Depends(get_db)):
         "image_url": f"/products/{producto.id}/image"  # URL para obtener la imagen
     }
 
-@router.post("/products")
+@router.post("/", dependencies=[Depends(JWTBearer())])
 async def crear_producto(
     result_json: str,
     history_id: int,

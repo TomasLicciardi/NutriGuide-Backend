@@ -1,6 +1,8 @@
 # app/config/image_analysis_config.py
 """
 Configuración centralizada para análisis de imágenes, pipeline multi-fuente y tiers.
+
+Fuente única de verdad para pesos de tiers, umbrales y parámetros del pipeline.
 """
 
 IMAGE_QUALITY_CONFIG = {
@@ -34,7 +36,6 @@ VALIDATION_CONFIG = {
     "critical_restrictions": ["sin_tacc", "sin_frutos_secos"],
 }
 
-# 4 restricciones soportadas
 SUPPORTED_RESTRICTIONS = {
     "sin_tacc": {
         "name": "Sin TACC",
@@ -62,20 +63,51 @@ SUPPORTED_RESTRICTIONS = {
     },
 }
 
-# Pesos de confianza por tier
+# ═══════════════════════════════════════════════════════════════════════════════
+# Pesos de confianza por tier — FUENTE ÚNICA DE VERDAD
+#
+# Justificación de pesos:
+#   allergen_text  0.98 — Declaración legal del fabricante (ANMAT/Código Alimentario)
+#   deterministic  0.97 — Reglas factuales verificables (keywords, INS codes)
+#   knowledge_base 0.93 — Ingredientes previamente verificados por el sistema
+#   embedding      0.88 — Inferencia semántica sobre datos curados (modelo local)
+#   openfoodfacts  0.85 — Base de datos comunitaria con taxonomía global
+#   pubchem        0.75 — Identificación química, clasificación inferida
+#   gemini         0.65 — LLM puede alucinar, se usa como último recurso
+# ═══════════════════════════════════════════════════════════════════════════════
 TIER_WEIGHTS = {
     "allergen_text": 0.98,
     "deterministic": 0.97,
     "knowledge_base": 0.93,
+    "embedding": 0.88,
     "openfoodfacts": 0.85,
     "pubchem": 0.75,
     "gemini": 0.65,
 }
 
-# Configuración del pipeline
+# ═══════════════════════════════════════════════════════════════════════════════
+# Knowledge Base — Control de calidad
+# ═══════════════════════════════════════════════════════════════════════════════
+KB_CONFIG = {
+    "min_write_confidence": 0.75,
+    "min_confidence_for_override": 0.85,
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Embedding Classifier
+# ═══════════════════════════════════════════════════════════════════════════════
+EMBEDDING_CONFIG = {
+    "model_name": "paraphrase-multilingual-MiniLM-L12-v2",
+    "similarity_threshold": 0.82,
+    "max_candidates": 3,
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Pipeline
+# ═══════════════════════════════════════════════════════════════════════════════
 PIPELINE_CONFIG = {
     "max_analysis_time": 45.0,
-    "tier_3_5_timeout": 15.0,
+    "tier_external_timeout": 15.0,
     "translation_batch_size": 50,
     "pubchem_max_concurrent": 4,
     "off_rate_limit_per_min": 100,

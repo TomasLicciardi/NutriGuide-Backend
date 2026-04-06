@@ -7,8 +7,11 @@ en bases de datos globales (Open Food Facts, PubChem).
 
 Modelo: Helsinki-NLP/opus-mt-es-en (~312MB)
 Se carga una sola vez al startup y reutiliza para todas las requests.
+
+v2.1: Agrega translate_batch_async() para no bloquear el event loop de FastAPI.
 """
 
+import asyncio
 import logging
 import threading
 from typing import Dict, List, Optional
@@ -212,6 +215,10 @@ class TranslationService:
         ]
         logger.info(f"Traducidos {len(texts)} ingredientes")
         return decoded
+
+    async def translate_batch_async(self, texts_es: List[str]) -> List[str]:
+        """Wrapper async que ejecuta la traducción en un thread separado."""
+        return await asyncio.to_thread(self.translate_batch, texts_es)
 
     @staticmethod
     def get_cache_size() -> int:

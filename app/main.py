@@ -12,11 +12,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="NutriGuide API V2",
-    description="API de análisis de ingredientes alimentarios con pipeline multi-fuente: "
-                "Gemini Vision OCR, traducción MarianMT, Open Food Facts, PubChem, "
-                "y motor de consenso ponderado. 4 restricciones dietéticas.",
-    version="2.0.0"
+    title="NutriGuide API V2.1",
+    description=(
+        "API de análisis de ingredientes alimentarios con pipeline multi-fuente: "
+        "Gemini Vision OCR+Clasificación unificados (1 sola llamada), "
+        "clasificador determinista, Knowledge Base con protección anti-contaminación, "
+        "embedding classifier local (sentence-transformers), "
+        "Open Food Facts, PubChem, y motor de consenso ponderado. "
+        "4 restricciones dietéticas."
+    ),
+    version="2.1.0"
 )
 
 logger.info("Inicializando base de datos...")
@@ -49,17 +54,27 @@ register_error_handlers(app)
 @app.get("/")
 async def root():
     return {
-        "message": "NutriGuide API V2 — Pipeline Multi-Fuente",
-        "version": "2.0.0",
+        "message": "NutriGuide API V2.1 — Pipeline Multi-Fuente con ML Local",
+        "version": "2.1.0",
         "pipeline": [
-            "Fase 1: OCR con Gemini Vision",
+            "Fase 1: OCR + Clasificación con Gemini Vision (1 sola llamada)",
             "Fase 2: Normalización de ingredientes",
-            "Fase 3: Traducción ES→EN (MarianMT local)",
-            "Fase 4: Clasificación 5 Tiers (Determinista → KB → OFF → PubChem → Gemini)",
-            "Fase 5: Análisis de alérgenos",
-            "Fase 6: Motor de consenso ponderado",
-            "Fase 7: Persistencia + aprendizaje",
+            "Fase 3: Traducción ES→EN (MarianMT local, async)",
+            "Fase 4: Clasificación multi-tier:",
+            "  → Tier 1: Determinista (reglas locales, instantáneo)",
+            "  → Tier 2: Knowledge Base (cache local, 1 query SQL batch)",
+            "  → Tier 3: Embedding Classifier (sentence-transformers, ML local)",
+            "  → Tier 4: Open Food Facts (API externa, batch)",
+            "  → Tier 5: PubChem (API externa, solo lo no resuelto por OFF)",
+            "Fase 5: Análisis de alérgenos (parser de texto legal)",
+            "Fase 6: Motor de consenso ponderado (7 fuentes)",
+            "Fase 7: Persistencia + aprendizaje (Knowledge Base)",
         ],
+        "optimizations": {
+            "gemini_calls_per_analysis": 1,
+            "local_ml_models": ["MarianMT (traducción)", "MiniLM (embeddings)"],
+            "kb_contamination_protection": True,
+        },
         "restrictions": ["sin_tacc", "sin_lactosa", "sin_frutos_secos", "vegano"],
         "endpoints": {
             "análisis": "/analysis/",
