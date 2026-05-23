@@ -1,0 +1,127 @@
+Gramática formal de listas de ingredientes argentinas
+======================================================
+
+Documentación de referencia para la tesis. Define los patrones que el parser
+estructural reconoce. La implementación práctica usa pattern matching (regex)
+para tolerar variaciones del OCR, pero los patrones siguen esta especificación.
+
+Notación: PEG-style (Parsing Expression Grammar)
+  | : alternativa
+  ? : opcional
+  * : cero o más
+  + : uno o más
+  ( ) : agrupación
+  [ ] : conjunto de caracteres
+  // : separador de regex
+  '...': literal
+
+
+─── Nivel superior ────────────────────────────────────────────────────────
+
+ingredient_list := ingredient (separator ingredient)* '.'?
+separator       := ',' | ';'
+
+allergen_block  := contains_clause? may_contain_clause? positive_claim*
+
+contains_clause     := /CONTIENE/i ':'? allergen_list '.'
+may_contain_clause  := /PUEDE\s+CONTENER/i ':'? allergen_list '.'
+allergen_list       := allergen_token ((',' | 'y' | 'Y') allergen_token)*
+
+positive_claim  := /SIN\s+T\.?A\.?C\.?C\.?/i
+                 | /LIBRE\s+DE\s+GLUTEN/i
+                 | /SIN\s+LACTOSA/i
+                 | /VEGANO/i
+                 | /APTO\s+VEGANO/i
+
+
+─── Ingrediente ───────────────────────────────────────────────────────────
+
+ingredient := function_prefix? ingredient_body sub_ingredients?
+
+function_prefix := function_word ':'
+                 | abbreviation ':'
+
+function_word := /Emulsionante|Conservante|Conservador|Acidulante|Antioxidante|
+                  Estabilizante|Espesante|Edulcorante|Colorante|Saborizante|
+                  Aromatizante|Espumante|Humectante|Antiaglutinante|Leudante|
+                  Secuestrante|Resaltador|Mejorador|Endurecedor|Gelificante|
+                  Regulador\s+de\s+acidez|Agente\s+de\s+recubrimiento|
+                  Exaltador|Gasificante|Potenciador/i
+
+abbreviation := 'EMU' | 'ACI' | 'ARO' | 'RAI' | 'EST' | 'COL' | 'RES' |
+                'SEC' | 'CON' | 'ANT' | 'HUM' | 'GAS' | 'ESP' | 'EDU'
+
+ingredient_body := flavoring_pattern
+                 | ley_25630_block
+                 | name_with_ins
+                 | plain_name
+
+
+─── Aromatizante (caso especial) ──────────────────────────────────────────
+
+flavoring_pattern := flavoring_word qualifier? sensory_link target_sensory
+
+flavoring_word := /aromatizantes?|saborizantes?|esencias?/i
+qualifier      := /artificial|idéntico\s+al\s+natural|natural\s+e\s+idéntico\s+al\s+natural|natural/i
+sensory_link   := /a|de|sabor\s+a|sabor/i
+target_sensory := /[\w\sáéíóúñ]+/i
+
+Ejemplos:
+  "aromatizante artificial a vainilla"
+    → flavoring_word=aromatizante, qualifier=artificial, target=vainilla
+  "saborizante idéntico al natural sabor queso"
+    → flavoring_word=saborizante, qualifier=idéntico al natural, target=queso
+  "aromatizantes naturales e idénticos al natural"
+    → flavoring_word=aromatizantes, qualifier=natural e idéntico al natural, target=∅ (genérico)
+
+
+─── Bloque Ley 25.630 (harina enriquecida) ────────────────────────────────
+
+ley_25630_block := /[Hh]arina\s+(de\s+trigo\s+|0{3,4}\s+)?enriquecida/
+                   (/según\s+/i)?
+                   /[Ll]ey/ ('Nº' | 'N°')? /\s*25[.\s]?630/
+
+El parser unifica todo el bloque (incluyendo paréntesis con vitaminas) como
+una sola entidad: "harina_trigo_enriquecida_ley_25630".
+
+Ejemplos:
+  "Harina de trigo enriquecida Ley Nº 25.630 (sulfato ferroso..., niacina...)"
+  "Harina 0000 enriquecida Ley 25.630"
+  "Harina de trigo enriquecida según Ley 25.630"
+
+
+─── Código INS ────────────────────────────────────────────────────────────
+
+name_with_ins   := plain_name '(' ins_reference ')'
+ins_reference   := ('INS' | 'E') /\s*\d{3,4}/ ins_subcode?
+ins_subcode     := /[a-z]+i*[ivx]*/  # ej: "ii" en "INS 500ii"
+
+Ejemplos:
+  "lecitina de soja (INS 322)"
+  "bicarbonato de sodio (INS 500ii)"
+  "fosfato tricálcico (INS 341iii)"
+  "caramelo IV (INS 150d)"
+
+
+─── Plain name + sub-ingredientes ─────────────────────────────────────────
+
+plain_name      := /[\w\sáéíóúñÁÉÍÓÚÑ\.\-\/]+/
+sub_ingredients := '(' ingredient (',' ingredient)* ')'
+
+Sub-ingredientes ejemplo:
+  "sazonador (sal, azúcar, glutamato monosódico)"
+
+
+─── Regla de inheritance de función ───────────────────────────────────────
+
+Cuando una función prefija una secuencia de ingredientes separados por comas,
+la función se aplica a TODOS hasta que aparece un nuevo prefijo de función.
+
+Ejemplo:
+  "leudantes químicos: bicarbonato de sodio (INS 500ii), bicarbonato de amonio
+   (INS 503ii), emulsionante: lecitina de soja (INS 322)"
+
+  Se interpreta como:
+    bicarbonato de sodio        → function=leudante
+    bicarbonato de amonio       → function=leudante  (hereda)
+    lecitina de soja            → function=emulsionante  (nuevo prefijo)

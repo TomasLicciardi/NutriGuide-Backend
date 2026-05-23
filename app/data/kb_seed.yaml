@@ -1,0 +1,2022 @@
+# kb_seed.yaml
+# Datos curados para pre-cargar la Knowledge Base (Tier 2) al startup.
+#
+# Estos ingredientes se insertan en la tabla `ingredients` si no existen,
+# con resolved_by="seed" y confianza 0.95 (alta, pero menor que Tier 1).
+#
+# Ventaja sobre hardcoding:
+#   - Se resuelven por el Tier 2 (KB), no por código
+#   - Pueden ser sobrescritos si un Tier 3+ encuentra mejor información
+#   - Son visibles, auditables y editables sin tocar código
+#   - Demuestran que el pipeline funciona desde el arranque
+
+# ══════════════════════════════════════════════════════════════════════
+# Ingredientes base universalmente seguros
+# ══════════════════════════════════════════════════════════════════════
+
+- name_es: agua
+  name_en: water
+  type: BASE
+  origin: mineral
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: sal
+  name_en: salt
+  type: BASE
+  origin: mineral
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: azucar
+  name_en: sugar
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: vinagre
+  name_en: vinegar
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: vinagre de alcohol
+  name_en: alcohol vinegar
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Aceites vegetales ──
+
+- name_es: aceite
+  name_en: oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite de girasol
+  name_en: sunflower oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite de oliva
+  name_en: olive oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite vegetal
+  name_en: vegetable oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite de soja
+  name_en: soybean oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite de maiz
+  name_en: corn oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite de palma
+  name_en: palm oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite de canola
+  name_en: canola oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite de girasol alto oleico
+  name_en: high oleic sunflower oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite vegetal de palma y canola
+  name_en: palm and canola vegetable oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite vegetal fraccionado
+  name_en: fractionated vegetable oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Cereales y almidones ──
+
+- name_es: maiz
+  name_en: corn
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: arroz
+  name_en: rice
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: arroz integral
+  name_en: brown rice
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: arroz parboil
+  name_en: parboiled rice
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: almidon de maiz
+  name_en: corn starch
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: almidon modificado
+  name_en: modified starch
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: almidon de papa
+  name_en: potato starch
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: almidon de mandioca
+  name_en: cassava starch
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: almidon modificado de maiz
+  name_en: modified corn starch
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: fecula de maiz
+  name_en: corn starch
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: fecula de papa
+  name_en: potato starch
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: fecula de mandioca
+  name_en: cassava starch
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: maltodextrina
+  name_en: maltodextrin
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: harina de maiz
+  name_en: corn flour
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: harina de arroz
+  name_en: rice flour
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: jarabe de glucosa
+  name_en: glucose syrup
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Ajustes de precisión observados en evaluación ──
+
+- name_es: mostaza blanca
+  name_en: white mustard
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: frutilla
+  name_en: strawberry
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: laurel en polvo
+  name_en: bay leaf powder
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: amarillo ocaso fcf
+  name_en: sunset yellow fcf
+  type: ADITIVO
+  origin: sintetico
+  function_tag: colorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: azul brillante fcf
+  name_en: brilliant blue fcf
+  type: ADITIVO
+  origin: sintetico
+  function_tag: colorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: rojo allura ac
+  name_en: allura red ac
+  type: ADITIVO
+  origin: sintetico
+  function_tag: colorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: jarabe de maiz
+  name_en: corn syrup
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: jarabe de maiz de alta fructosa
+  name_en: high fructose corn syrup
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: dextrosa
+  name_en: dextrose
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: fructosa
+  name_en: fructose
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: mandioca
+  name_en: cassava
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: tapioca
+  name_en: tapioca
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Verduras, frutas y legumbres ──
+
+- name_es: tomate
+  name_en: tomato
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pure de tomate
+  name_en: tomato puree
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: cebolla
+  name_en: onion
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: ajo
+  name_en: garlic
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: zanahoria
+  name_en: carrot
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: zapallo
+  name_en: pumpkin
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: papa
+  name_en: potato
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: papas
+  name_en: potatoes
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: arvejas
+  name_en: peas
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: morron rojo
+  name_en: red bell pepper
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aji jalapeno
+  name_en: jalapeno pepper
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: manzana
+  name_en: apple
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: naranja
+  name_en: orange
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: limon
+  name_en: lemon
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: durazno
+  name_en: peach
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: duraznos
+  name_en: peaches
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: ciruelas
+  name_en: plums
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: jugo de limon
+  name_en: lemon juice
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: jugo de naranja deshidratado
+  name_en: dehydrated orange juice
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pasas de uva
+  name_en: raisins
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: te negro
+  name_en: black tea
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: avena arrollada
+  name_en: rolled oats
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: copos de maiz
+  name_en: corn flakes
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: crispines de arroz
+  name_en: rice crispies
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Semillas (seguras para frutos secos) ──
+
+- name_es: semillas de girasol
+  name_en: sunflower seeds
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: semillas de zapallo
+  name_en: pumpkin seeds
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Especias y hierbas ──
+
+- name_es: especias
+  name_en: spices
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pimienta
+  name_en: pepper
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pimienta negra
+  name_en: black pepper
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: curcuma
+  name_en: turmeric
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: canela
+  name_en: cinnamon
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: oregano
+  name_en: oregano
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: comino
+  name_en: cumin
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pimenton dulce
+  name_en: sweet paprika
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: clavo de olor
+  name_en: clove
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: canela en rama triturada
+  name_en: crushed cinnamon sticks
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Cacao y vainilla ──
+
+- name_es: cacao
+  name_en: cocoa
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: cacao en polvo
+  name_en: cocoa powder
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: cacao alcalinizado en polvo
+  name_en: alkalized cocoa powder
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: masa de cacao
+  name_en: cocoa mass
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: manteca de cacao
+  name_en: cocoa butter
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: vainilla
+  name_en: vanilla
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Fermentos ──
+
+- name_es: levadura
+  name_en: yeast
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: extracto de levadura
+  name_en: yeast extract
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Soja y legumbres ──
+
+- name_es: poroto de soja
+  name_en: soybean
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: porotos de soja
+  name_en: soybeans
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: proteina de soja
+  name_en: soy protein
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: proteina de maiz
+  name_en: corn protein
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Aditivos alimentarios comunes ──
+
+- name_es: acido citrico
+  name_en: citric acid
+  type: ADITIVO
+  origin: sintetico
+  function_tag: acidulante
+  description_es: Acidulante y conservante sintético
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: acido lactico
+  name_en: lactic acid
+  type: ADITIVO
+  origin: sintetico
+  function_tag: acidulante
+  description_es: Acidulante producido por fermentación, no contiene lactosa
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: acido fosforico
+  name_en: phosphoric acid
+  type: ADITIVO
+  origin: sintetico
+  function_tag: acidulante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: acido sorbico
+  name_en: sorbic acid
+  type: ADITIVO
+  origin: sintetico
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: acido ascorbico
+  name_en: ascorbic acid
+  type: ADITIVO
+  origin: sintetico
+  function_tag: antioxidante
+  description_es: Vitamina C, antioxidante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: acido acetico
+  name_en: acetic acid
+  type: ADITIVO
+  origin: sintetico
+  function_tag: acidulante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: sorbato de potasio
+  name_en: potassium sorbate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: benzoato de sodio
+  name_en: sodium benzoate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: metabisulfito de sodio
+  name_en: sodium metabisulfite
+  type: ADITIVO
+  origin: sintetico
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: propionato de calcio
+  name_en: calcium propionate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: nitrito de sodio
+  name_en: sodium nitrite
+  type: ADITIVO
+  origin: sintetico
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: bicarbonato de sodio
+  name_en: sodium bicarbonate
+  type: ADITIVO
+  origin: mineral
+  function_tag: leudante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: bicarbonato de amonio
+  name_en: ammonium bicarbonate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: leudante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: goma xantica
+  name_en: xanthan gum
+  type: ADITIVO
+  origin: vegetal
+  function_tag: espesante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: goma guar
+  name_en: guar gum
+  type: ADITIVO
+  origin: vegetal
+  function_tag: espesante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: goma garrofin
+  name_en: locust bean gum
+  type: ADITIVO
+  origin: vegetal
+  function_tag: espesante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: carragenina
+  name_en: carrageenan
+  type: ADITIVO
+  origin: vegetal
+  function_tag: espesante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pectina
+  name_en: pectin
+  type: ADITIVO
+  origin: vegetal
+  function_tag: espesante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: celulosa microcristalina
+  name_en: microcrystalline cellulose
+  type: ADITIVO
+  origin: vegetal
+  function_tag: antiaglutinante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: lecitina de soja
+  name_en: soy lecithin
+  type: ADITIVO
+  origin: vegetal
+  function_tag: emulsionante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: lecitina de girasol
+  name_en: sunflower lecithin
+  type: ADITIVO
+  origin: vegetal
+  function_tag: emulsionante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: mono y digliceridos de acidos grasos
+  name_en: mono and diglycerides of fatty acids
+  type: ADITIVO
+  origin: vegetal
+  function_tag: emulsionante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: poliglicerol polirricinoleato
+  name_en: polyglycerol polyricinoleate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: emulsionante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: bha
+  name_en: butylated hydroxyanisole
+  type: ADITIVO
+  origin: sintetico
+  function_tag: antioxidante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: bht
+  name_en: butylated hydroxytoluene
+  type: ADITIVO
+  origin: sintetico
+  function_tag: antioxidante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: tbhq
+  name_en: tert-butylhydroquinone
+  type: ADITIVO
+  origin: sintetico
+  function_tag: antioxidante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: tartrazina
+  name_en: tartrazine
+  type: ADITIVO
+  origin: sintetico
+  function_tag: colorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: caramelo
+  name_en: caramel color
+  type: ADITIVO
+  origin: sintetico
+  function_tag: colorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: dioxido de titanio
+  name_en: titanium dioxide
+  type: ADITIVO
+  origin: mineral
+  function_tag: colorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: extracto de pimenton
+  name_en: paprika extract
+  type: ADITIVO
+  origin: vegetal
+  function_tag: colorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: annatto
+  name_en: annatto
+  type: ADITIVO
+  origin: vegetal
+  function_tag: colorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aspartamo
+  name_en: aspartame
+  type: ADITIVO
+  origin: sintetico
+  function_tag: edulcorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: acesulfame k
+  name_en: acesulfame potassium
+  type: ADITIVO
+  origin: sintetico
+  function_tag: edulcorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: sucralosa
+  name_en: sucralose
+  type: ADITIVO
+  origin: sintetico
+  function_tag: edulcorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: sorbitol
+  name_en: sorbitol
+  type: ADITIVO
+  origin: sintetico
+  function_tag: edulcorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: glutamato monosodico
+  name_en: monosodium glutamate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: resaltador de sabor
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: guanilato disodico
+  name_en: disodium guanylate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: resaltador de sabor
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: inosinato disodico
+  name_en: disodium inosinate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: resaltador de sabor
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: dioxido de silicio
+  name_en: silicon dioxide
+  type: ADITIVO
+  origin: mineral
+  function_tag: antiaglutinante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: fosfato tricalcico
+  name_en: tricalcium phosphate
+  type: ADITIVO
+  origin: mineral
+  function_tag: antiaglutinante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: lactato de calcio
+  name_en: calcium lactate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: estabilizante
+  description_es: Sal de calcio del ácido láctico, no contiene lactosa
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: cloruro de calcio
+  name_en: calcium chloride
+  type: ADITIVO
+  origin: mineral
+  function_tag: estabilizante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite esencial de limon
+  name_en: lemon essential oil
+  type: ADITIVO
+  origin: vegetal
+  function_tag: saborizante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: cera de carnauba
+  name_en: carnauba wax
+  type: ADITIVO
+  origin: vegetal
+  function_tag: agente de recubrimiento
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: alcohol etilico
+  name_en: ethyl alcohol
+  type: ADITIVO
+  origin: vegetal
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: almidon modificado
+  name_en: modified starch
+  type: ADITIVO
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Vitaminas y minerales ──
+
+- name_es: acido folico
+  name_en: folic acid
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: sulfato ferroso
+  name_en: ferrous sulfate
+  type: ADITIVO
+  origin: mineral
+  function_tag: mineral
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: sulfato de zinc
+  name_en: zinc sulfate
+  type: ADITIVO
+  origin: mineral
+  function_tag: mineral
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: tiamina
+  name_en: thiamine
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: riboflavina
+  name_en: riboflavin
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: nicotinamida
+  name_en: nicotinamide
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: vitaminas y minerales
+  name_en: vitamins and minerals
+  type: ADITIVO
+  origin: sintetico
+  function_tag: fortificante
+  description_es: Mezcla de micronutrientes usada como fortificante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ══════════════════════════════════════════════════════════════════════
+# Ingredientes de origen animal / riesgosos
+# ══════════════════════════════════════════════════════════════════════
+
+- name_es: mantequilla
+  name_en: butter
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: manteca
+  name_en: butter
+  type: BASE
+  origin: animal
+  description_es: Grasa láctea (en Argentina, manteca = butter)
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: crema
+  name_en: cream
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: crema de leche
+  name_en: cream
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: nata
+  name_en: cream
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: dulce de leche
+  name_en: dulce de leche
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: harina enriquecida
+  name_en: enriched flour
+  type: BASE
+  origin: vegetal
+  description_es: Siempre es de trigo en Argentina (Ley 25.630)
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: fideos
+  name_en: pasta
+  type: BASE
+  origin: vegetal
+  description_es: En Argentina, fideos = harina de trigo salvo indicación contraria
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: extracto de malta
+  name_en: malt extract
+  type: BASE
+  origin: vegetal
+  description_es: Malta = cebada, contiene gluten
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Carnes y embutidos comunes ──
+
+- name_es: jamon
+  name_en: ham
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: panceta
+  name_en: bacon
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: chorizo
+  name_en: chorizo
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: bondiola
+  name_en: pork shoulder
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: salchicha
+  name_en: sausage
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: atun
+  name_en: tuna
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: salmon
+  name_en: salmon
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: sardina
+  name_en: sardine
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: ricota
+  name_en: ricotta
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: leche en polvo
+  name_en: powdered milk
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: proteina de leche
+  name_en: milk protein
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: grasa de leche
+  name_en: milk fat
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: grasa bovina refinada
+  name_en: refined beef fat
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: grasa bovina
+  name_en: beef fat
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: primer jugo
+  name_en: beef tallow
+  type: BASE
+  origin: animal
+  description_es: Grasa bovina refinada, común en galletitas argentinas
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: carne de cerdo
+  name_en: pork
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: carne bovina
+  name_en: beef
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: gelatina
+  name_en: gelatin
+  type: ADITIVO
+  origin: animal
+  function_tag: espesante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: yema de huevo pasteurizada
+  name_en: pasteurized egg yolk
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: suero de queso en polvo
+  name_en: whey powder
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: fermentos lacticos
+  name_en: lactic cultures
+  type: ADITIVO
+  origin: animal
+  function_tag: fermento
+  description_es: Cultivos lácticos usados en quesos y yogures
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: cuajo
+  name_en: rennet
+  type: ADITIVO
+  origin: animal
+  function_tag: enzima
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: miel
+  name_en: honey
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+# ── Lácteos ocultos (nombres técnicos no obvios para el consumidor) ──
+
+- name_es: caseinato de sodio
+  name_en: sodium caseinate
+  type: ADITIVO
+  origin: animal
+  function_tag: emulsionante
+  description_es: Caseinato (proteína de leche) + sodio. Lácteo y aporta sodio
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: caseinato de calcio
+  name_en: calcium caseinate
+  type: ADITIVO
+  origin: animal
+  function_tag: emulsionante
+  description_es: Sal de calcio de la caseína (proteína láctea)
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: caseina
+  name_en: casein
+  type: BASE
+  origin: animal
+  description_es: Proteína principal de la leche
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: suero de leche
+  name_en: whey
+  type: BASE
+  origin: animal
+  description_es: Fracción líquida del coagulado lácteo, contiene lactosa
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: lactosuero
+  name_en: whey
+  type: BASE
+  origin: animal
+  description_es: Sinónimo industrial de suero de leche
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: permeado de suero
+  name_en: whey permeate
+  type: BASE
+  origin: animal
+  description_es: Subproducto del filtrado del suero lácteo, contiene lactosa
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: permeado de suero en polvo
+  name_en: whey permeate powder
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: lactalbumina
+  name_en: lactalbumin
+  type: BASE
+  origin: animal
+  description_es: Proteína del suero de leche
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: lactosa
+  name_en: lactose
+  type: BASE
+  origin: animal
+  description_es: Azúcar de la leche
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+# ── Colorantes de origen animal (cochinilla / INS 120) ──
+
+- name_es: acido carminico
+  name_en: carminic acid
+  type: ADITIVO
+  origin: animal
+  function_tag: colorante
+  description_es: Colorante rojo extraído de la cochinilla (insecto). INS 120
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: carmin
+  name_en: carmine
+  type: ADITIVO
+  origin: animal
+  function_tag: colorante
+  description_es: Colorante rojo derivado del ácido carmínico (cochinilla). INS 120
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+# ── Grasas mixtas (margarina comercial AR contiene lácteos por defecto) ──
+
+- name_es: margarina
+  name_en: margarine
+  type: BASE
+  origin: animal
+  description_es: Margarina comercial AR estándar = aceites vegetales hidrogenados + lácteos (suero/leche). Clasificación conservadora para lactosa/vegano
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+# ── Vegetales deshidratados (comunes en productos industriales) ──
+
+- name_es: vegetales deshidratados
+  name_en: dehydrated vegetables
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: manzana deshidratada
+  name_en: dehydrated apple
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: cebolla en polvo
+  name_en: onion powder
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: fruta
+  name_en: fruit
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: carne aviar
+  name_en: poultry meat
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: queso
+  name_en: cheese
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: huevo
+  name_en: egg
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: huevo entero
+  name_en: whole egg
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: huevo liquido
+  name_en: liquid egg
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: vitamina a
+  name_en: vitamin a
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: estearoil lactilato de sodio
+  name_en: sodium stearoyl lactylate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: emulsionante
+  description_es: Emulsionante usado en panificados
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Vitaminas y minerales fortificantes adicionales ──
+# Nombres químicos canónicos de vitaminas/minerales en productos enriquecidos
+# (cereales, lácteos infantiles). OFF no los indexa (sin número E porque son
+# fortificantes, no aditivos tecnológicos), pero su clasificación es universal:
+# síntesis química pura, safe en las 4 restricciones. Los aliases en
+# canonicalization_rules.yaml mapean los nombres comerciales hacia estos.
+
+- name_es: piridoxina
+  name_en: pyridoxine
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  description_es: Vitamina B6
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: cianocobalamina
+  name_en: cyanocobalamin
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  description_es: Vitamina B12 (forma comercial sintetica)
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: colecalciferol
+  name_en: cholecalciferol
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  description_es: Vitamina D3 sintetica
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: biotina
+  name_en: biotin
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  description_es: Vitamina B7 / H
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: fumarato ferroso
+  name_en: ferrous fumarate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  description_es: Sal de hierro usada como fortificante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: oxido de zinc
+  name_en: zinc oxide
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  description_es: Sal de zinc usada como fortificante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pirofosfato ferrico
+  name_en: ferric pyrophosphate
+  type: ADITIVO
+  origin: sintetico
+  function_tag: vitamina
+  description_es: Sal de hierro usada como fortificante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true

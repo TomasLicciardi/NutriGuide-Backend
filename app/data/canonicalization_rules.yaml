@@ -1,0 +1,239 @@
+# Reglas de canonicalizacion de ingredientes.
+#
+# Objetivo: resolver variantes de etiqueta hacia una entidad canonica antes de
+# consultar KB/OFF, sin meter reglas por producto ni por foto.
+#
+# Las claves se comparan normalizadas: minusculas, sin acentos, espacios
+# compactados.
+
+aliases:
+  cloruro de sodio:
+    canonical: sal
+    name_en: salt
+    reason: sinonimo quimico comun
+  cultivos lacticos:
+    canonical: fermentos lacticos
+    name_en: lactic cultures
+    reason: sinonimo tecnologico lacteo
+  cultivo lactico:
+    canonical: fermentos lacticos
+    name_en: lactic cultures
+    reason: sinonimo tecnologico lacteo
+  caramelo i:
+    canonical: caramelo
+    name_en: caramel color
+    reason: clase Codex de color caramelo
+  caramelo ii:
+    canonical: caramelo
+    name_en: caramel color
+    reason: clase Codex de color caramelo
+  caramelo iii:
+    canonical: caramelo
+    name_en: caramel color
+    reason: clase Codex de color caramelo
+  caramelo iv:
+    canonical: caramelo
+    name_en: caramel color
+    reason: clase Codex de color caramelo
+  vitamina b1:
+    canonical: tiamina
+    name_en: thiamine
+    reason: nombre vitaminico equivalente
+  vitamina b2:
+    canonical: riboflavina
+    name_en: riboflavin
+    reason: nombre vitaminico equivalente
+  vitamina pp:
+    canonical: nicotinamida
+    name_en: nicotinamide
+    reason: nombre vitaminico equivalente
+  vitamina b6:
+    canonical: piridoxina
+    name_en: pyridoxine
+    reason: nombre vitaminico equivalente
+  vitamina b9:
+    canonical: acido folico
+    name_en: folic acid
+    reason: nombre vitaminico equivalente
+  vitamina b12:
+    canonical: cianocobalamina
+    name_en: cyanocobalamin
+    reason: nombre vitaminico equivalente
+  vitamina c:
+    canonical: acido ascorbico
+    name_en: ascorbic acid
+    reason: nombre vitaminico equivalente
+  vitamina d:
+    canonical: colecalciferol
+    name_en: cholecalciferol
+    reason: nombre vitaminico equivalente (D3 es la forma comercial)
+  vitamina d3:
+    canonical: colecalciferol
+    name_en: cholecalciferol
+    reason: nombre vitaminico equivalente
+  vitamina e:
+    canonical: tocoferol
+    name_en: tocopherol
+    reason: nombre vitaminico equivalente
+  vitamina h:
+    canonical: biotina
+    name_en: biotin
+    reason: nombre vitaminico equivalente (B7/H)
+  oleomargarina:
+    canonical: margarina
+    name_en: margarine
+    reason: termino industrial equivalente a margarina
+  inosinato de sodio:
+    canonical: inosinato disodico
+    name_en: disodium inosinate
+    reason: sinonimo de resaltador INS 631
+  rocu:
+    canonical: annatto
+    name_en: annatto
+    reason: nombre regional de colorante vegetal
+  fruta escurrida:
+    canonical: fruta
+    name_en: fruit
+    reason: preparacion de fruta sin cambio de alergenos
+  primer jugo bovino:
+    canonical: primer jugo
+    name_en: beef tallow
+    reason: sinonimo industrial de grasa bovina
+  cacao alcalinizado:
+    canonical: cacao alcalinizado en polvo
+    name_en: alkalized cocoa powder
+    reason: forma fisica omitida en etiqueta
+  hidrolizado de proteina de maiz:
+    canonical: proteina de maiz
+    name_en: corn protein
+    reason: hidrolizado de proteina de maiz conserva origen vegetal de maiz
+  grasa bovina:
+    canonical: grasa bovina
+    name_en: beef fat
+    reason: grasa de origen bovino
+
+  # ─── Sinónimos regionales AR↔ES (uso ibérico en OFF taxonomy) ───
+  # OFF a veces tiene el ingrediente solo bajo el nombre ibérico; agregamos
+  # los argentinos como alias para que el lookup multilingüe matchee.
+  #
+  # CRITICO: 'manteca' en OFF apunta a en:fat (grasa genérica) por uso
+  # ibérico, pero en Argentina manteca=mantequilla (lácteo). Sin este alias
+  # un producto con manteca quedaría APTO sin_lactosa por error.
+  manteca:
+    canonical: mantequilla
+    name_en: butter
+    reason: manteca (AR) = mantequilla (lacteo); OFF mapea manteca a grasa genérica
+  arveja:
+    canonical: guisante
+    name_en: pea
+    reason: arveja (AR) = guisante (ES); OFF indexa solo el ibero
+  arvejas:
+    canonical: guisante
+    name_en: pea
+    reason: arveja (AR) = guisante (ES); OFF indexa solo el ibero
+  proteina de arveja:
+    canonical: proteina de guisante
+    name_en: pea protein
+    reason: arveja (AR) = guisante (ES)
+  palta:
+    canonical: aguacate
+    name_en: avocado
+    reason: palta (AR) = aguacate (ES)
+  durazno:
+    canonical: melocoton
+    name_en: peach
+    reason: durazno (AR) = melocoton (ES)
+  damasco:
+    canonical: albaricoque
+    name_en: apricot
+    reason: damasco (AR) = albaricoque (ES)
+  ananá:
+    canonical: piña
+    name_en: pineapple
+    reason: anana (AR) = piña (ES)
+  anana:
+    canonical: piña
+    name_en: pineapple
+    reason: anana (AR) = piña (ES)
+  frutilla:
+    canonical: fresa
+    name_en: strawberry
+    reason: frutilla (AR) = fresa (ES)
+  frutillas:
+    canonical: fresa
+    name_en: strawberry
+    reason: frutilla (AR) = fresa (ES)
+  choclo:
+    canonical: maiz
+    name_en: corn
+    reason: choclo (AR) = maiz tierno
+  poroto:
+    canonical: judia
+    name_en: bean
+    reason: poroto (AR) = judia/alubia (ES)
+  porotos:
+    canonical: judia
+    name_en: bean
+    reason: poroto (AR) = judia/alubia (ES)
+  banana:
+    canonical: platano
+    name_en: banana
+    reason: banana (AR) = plátano (ES)
+  bananas:
+    canonical: platano
+    name_en: banana
+    reason: banana (AR) = plátano (ES)
+
+patterns:
+  - id: enriched_wheat_flour_argentina
+    pattern: "^harina(?:\\s+de)?\\s+trigo(?:\\s+(?:tipo\\s*)?0{3,4})?\\s+enriquecida(?:\\s+(?:segun\\s+)?ley\\s*25[\\.]?630)?$"
+    canonical: harina enriquecida
+    name_en: enriched wheat flour
+    reason: harina enriquecida argentina por Ley 25.630
+
+  - id: wheat_semolina
+    pattern: "^semola\\s+de\\s+trigo(?:\\s+candeal)?$"
+    canonical: harina enriquecida
+    name_en: wheat semolina
+    reason: semola de trigo contiene gluten
+
+  - id: tomato_derivatives
+    pattern: "^(?:concentrado\\s+doble\\s+de\\s+tomate|extracto\\s+de\\s+tomate|tomate\\s+pelado(?:s)?)$"
+    canonical: tomate
+    name_en: tomato
+    reason: derivado de tomate sin cambio de alergenos
+
+  - id: cheese_variety
+    pattern: "^queso(?!\\s+(?:vegano|vegetal|de\\s+(?:soja|almendra|castana|castanas|caju|mani))).+$"
+    canonical: queso
+    name_en: cheese
+    reason: variedad de queso lacteo
+
+  - id: caramel_roman_class
+    pattern: "^caramelo\\s+(?:i|ii|iii|iv|1|2|3|4)$"
+    canonical: caramelo
+    name_en: caramel color
+    reason: clase de color caramelo
+
+  - id: concentrated_juice
+    pattern: "^jugo\\s+(?:concentrado\\s+de|de)\\s+(.+?)(?:\\s+deshidratado)?$"
+    canonical_template: "jugo de {1}"
+    candidate_templates:
+      - "jugo de {1}"
+      - "{1}"
+    name_en_template: "{1} juice"
+    reason: jugo de fruta concentrado/deshidratado
+
+  - id: powdered_ingredient
+    pattern: "^(.+?)\\s+en\\s+polvo$"
+    canonical_template: "{1}"
+    candidate_templates:
+      - "{1}"
+    reason: forma fisica en polvo no cambia alergenos
+
+  - id: processing_state_suffix
+    pattern: "^(.+?)\\s+(?:pasteurizad[oa]s?|refinad[oa]s?|deshidratad[oa]s?|tostad[oa]s?|pelad[oa]s?|molid[oa]s?|trozad[oa]s?|picad[oa]s?|rallad[oa]s?|cocid[oa]s?|rehidratad[oa]s?)$"
+    canonical_template: "{1}"
+    candidate_templates:
+      - "{1}"
+    reason: estado/proceso no cambia identidad base

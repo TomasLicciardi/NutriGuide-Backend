@@ -1,6 +1,6 @@
 #app/database/connection.py
 import os
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
@@ -46,3 +46,17 @@ def init_database():
     inspector = inspect(engine)
     if not inspector.get_table_names():
         Base.metadata.create_all(bind=engine)
+
+    _ensure_ingredients_columns()
+
+
+def _ensure_ingredients_columns():
+    """Aplica migraciones chicas compatibles con SQLite ya creadas."""
+    inspector = inspect(engine)
+    if "ingredients" not in inspector.get_table_names():
+        return
+
+    columns = {c["name"] for c in inspector.get_columns("ingredients")}
+    with engine.begin() as conn:
+        if "provenance" not in columns:
+            conn.execute(text("ALTER TABLE ingredients ADD COLUMN provenance VARCHAR"))

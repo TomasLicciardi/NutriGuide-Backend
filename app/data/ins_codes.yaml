@@ -1,0 +1,93 @@
+# ins_codes.yaml
+# Códigos INS/E — estándar internacional del Codex Alimentarius.
+#
+# El motor de reglas detecta patrones "INS XXX" o "EXXX" en el texto,
+# y los clasifica según este archivo. Esto SÍ requiere estar en Tier 1
+# porque es un sistema de codificación formal con reglas fijas.
+
+affects:
+  120:
+    vegano: "carmín/cochinilla (origen insecto)"
+  441:
+    vegano: "gelatina (origen animal)"
+  542:
+    vegano: "fosfato de hueso (origen animal)"
+  901:
+    vegano: "cera de abejas"
+  904:
+    vegano: "shellac/goma laca (origen insecto)"
+  966:
+    sin_lactosa: "lactitol (derivado de lactosa)"
+
+safe:
+  # Conservantes
+  - 200
+  - 202
+  - 211
+  - 250
+  - 251
+  - 270
+  - 282
+  # Antioxidantes
+  - 300
+  - 316
+  - 320
+  - 321
+  # Reguladores / acidulantes
+  - 330
+  - 331
+  - 341
+  # Espesantes / estabilizantes / emulsionantes
+  - 400
+  - 407
+  - 410
+  - 412
+  - 415
+  - 422
+  - 440
+  - 452
+  - 460
+  - 461
+  - 471
+  - 481
+  # Leudantes / gasificantes / antiaglutinantes
+  - 500
+  - 503
+  - 516
+  - 536
+  - 551
+  # Resaltadores de sabor
+  - 621
+  - 631
+  - 627
+  # Colorantes vegetales/sintéticos
+  - 100
+  - 101
+  - 102
+  - 110
+  - 129
+  - 133
+  - 150
+  - 160
+  - 171
+  # Edulcorantes
+  - 950
+  - 951
+  - 952
+  - 955
+  - 960
+  # Mejoradores
+  - 920
+  - 928
+  # Agentes de recubrimiento vegetales
+  - 903
+  # Secuestrantes
+  - 385
+
+safe_ranges:
+  - [200, 283]
+  - [300, 341]
+  - [400, 499]
+  - [500, 580]
+  - [620, 635]
+  - [950, 969]

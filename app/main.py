@@ -1,4 +1,4 @@
-#app/main.py
+# app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,16 +12,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="NutriGuide API V2.1",
+    title="NutriGuide API",
     description=(
-        "API de análisis de ingredientes alimentarios con pipeline multi-fuente: "
-        "Gemini Vision OCR+Clasificación unificados (1 sola llamada), "
-        "clasificador determinista, Knowledge Base con protección anti-contaminación, "
-        "embedding classifier local (sentence-transformers), "
-        "Open Food Facts, PubChem, y motor de consenso ponderado. "
-        "4 restricciones dietéticas."
+        "API de análisis de etiquetas alimentarias con pipeline multi-fuente: "
+        "OCR Gemini Vision, parser estructural argentino, federación de fuentes "
+        "(Codex INS + Open Food Facts + Knowledge Base local + Gemini fallback), "
+        "y predicados declarativos por restricción dietética. "
+        "Diseño fact base / rule base con trazabilidad por tag."
     ),
-    version="2.1.0"
+    version="3.0.0",
 )
 
 logger.info("Inicializando base de datos...")
@@ -54,32 +53,23 @@ register_error_handlers(app)
 @app.get("/")
 async def root():
     return {
-        "message": "NutriGuide API V2.1 — Pipeline Multi-Fuente con ML Local",
-        "version": "2.1.0",
+        "message": "NutriGuide API — Pipeline multi-fuente con fact base / rule base",
+        "version": "3.0.0",
         "pipeline": [
-            "Fase 1: OCR + Clasificación con Gemini Vision (1 sola llamada)",
-            "Fase 2: Normalización de ingredientes",
-            "Fase 3: Traducción ES→EN (MarianMT local, async)",
-            "Fase 4: Clasificación multi-tier:",
-            "  → Tier 1: Determinista (reglas locales, instantáneo)",
-            "  → Tier 2: Knowledge Base (cache local, 1 query SQL batch)",
-            "  → Tier 3: Embedding Classifier (sentence-transformers, ML local)",
-            "  → Tier 4: Open Food Facts (API externa, batch)",
-            "  → Tier 5: PubChem (API externa, solo lo no resuelto por OFF)",
-            "Fase 5: Análisis de alérgenos (parser de texto legal)",
-            "Fase 6: Motor de consenso ponderado (7 fuentes)",
-            "Fase 7: Persistencia + aprendizaje (Knowledge Base)",
+            "Fase 1: OCR + clasificación con Gemini Vision (1 sola llamada paga)",
+            "Fase 2: Parser estructural argentino (Lark) → ParsedIngredient + ProductLegalDeclaration",
+            "Fase 3: Resolución por declaración legal (CONTIENE / PUEDE CONTENER / claims)",
+            "Fase 4: Enrichment paralelo (Codex INS + OFF taxonomy + KB local + Gemini)",
+            "Fase 4.5: LLM batch fallback (1 llamada Gemini agrupada para unresolved)",
+            "Fase 5: Predicados declarativos por restricción sobre IngredientFacts",
+            "Fase 6: Veredicto + persistencia + actualización de KB",
         ],
-        "optimizations": {
-            "gemini_calls_per_analysis": 1,
-            "local_ml_models": ["MarianMT (traducción)", "MiniLM (embeddings)"],
-            "kb_contamination_protection": True,
-        },
         "restrictions": ["sin_tacc", "sin_lactosa", "sin_frutos_secos", "vegano"],
         "endpoints": {
             "análisis": "/analysis/",
             "documentación": "/docs",
-        }
+            "salud": "/health",
+        },
     }
 
 

@@ -1,80 +1,116 @@
 # app/services/analysis_pipeline.py
 """
-Pipeline Orchestrator — Coordina las 7 fases del análisis multi-fuente.
+Analysis Pipeline — orquestador del flujo de análisis.
 
-Fases:
-  1. OCR + Clasificación con Gemini Vision (1 sola llamada)
-  2. Normalización
-  3. Traducción ES→EN con MarianMT local (async)
-  4. Clasificación multi-tier:
-     - Tier 1: Determinista (local, reglas)
-     - Tier 2: Knowledge Base (local, DB)
-     - Tier 3: Embedding Classifier (local, ML)
-     - Tier 4: Open Food Facts (externo, batch)
-     - Tier 5: PubChem (externo, solo lo que OFF no resolvió)
-     (Gemini ya clasificó todo en la Fase 1 — se usa en consenso)
-  5. Análisis de texto de alérgenos
-  6. Motor de consenso ponderado
-  7. Persistencia + aprendizaje (Knowledge Base)
+6 fases:
+  1. OCR con Gemini Vision (1 sola llamada — reutiliza gemini_service)
+  2. Parser estructural argentino (parser/) → ParsedIngredient + ProductLegalDeclaration
+  3. Resolución por declaración legal (autoridad #1)
+  4. Enrichment paralelo (enrichment_service) → IngredientFacts
+  5. Evaluación de predicados declarativos (restriction_predicates)
+  6. Veredicto + persistencia
 
-Mejoras v2.1:
-  - Gemini reducido de 2 a 1 sola llamada (OCR + clasificación unificados)
-  - Nuevo Tier 3 con modelo local de embeddings (sentence-transformers)
-  - Traducción async (no bloquea event loop)
-  - KB batch query + protección contra contaminación
+Diseño "fact base / rule base" — los predicados operan sobre IngredientFacts
+con trazabilidad de fuente por tag.
 """
 
 import asyncio
 import json
-import time
 import logging
-from typing import Dict, List, Optional
+import time
 from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
 from app.services.gemini_service import gemini_service, OCRResult
 from app.services.translation_service import translation_service
-from app.services.deterministic_classifier import classifier
-from app.services.knowledge_base_service import knowledge_base_service
-from app.services.embedding_classifier import embedding_classifier
-from app.services.openfoodfacts_service import openfoodfacts_service
-from app.services.pubchem_service import pubchem_service
-from app.services.consensus_engine import consensus_engine, IngredientVerdict, ProductVerdict
-from app.utils.allergen_parser import parse_allergen_text
+from app.services.parser import (
+    parse_allergen_declaration,
+    parse_ingredient_list,
+    ParsedIngredient,
+)
+from app.services.enrichment_service import enrichment_service
+from app.services.restriction_predicates import (
+    ALL_RESTRICTIONS,
+    PredicateResult,
+    evaluate_restriction,
+)
+from app.services.ingredient_facts import (
+    ANIMAL_SOURCES,
+    DAIRY_SOURCES,
+    GLUTEN_SOURCES,
+    IngredientFacts,
+    NUT_SOURCES,
+    ProductLegalDeclaration,
+)
 
 logger = logging.getLogger(__name__)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Mapeo restricción → set de alérgenos (para resolución legal)
+# ═══════════════════════════════════════════════════════════════════════════
+
+_RESTRICTION_ALLERGEN_SETS = {
+    "sin_tacc": GLUTEN_SOURCES,
+    "sin_lactosa": DAIRY_SOURCES,
+    "sin_frutos_secos": NUT_SOURCES,
+    "vegano": ANIMAL_SOURCES,
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Resultados estructurados
+# ═══════════════════════════════════════════════════════════════════════════
 
 
 @dataclass
 class PipelineStats:
     total_ingredients: int = 0
-    by_deterministic: int = 0
-    by_knowledge_base: int = 0
-    by_embedding: int = 0
-    by_openfoodfacts: int = 0
-    by_pubchem: int = 0
-    by_gemini: int = 0
+    total_flavorings: int = 0
+    resolved_by_legal: int = 0
+    resolved_by_codex: int = 0
+    resolved_by_off: int = 0
+    resolved_by_kb: int = 0
+    resolved_by_gemini: int = 0
+    resolved_by_llm: int = 0
+    resolved_by_policy: int = 0
     unresolved: int = 0
-    gemini_calls: int = 0
+    gemini_calls: int = 1
     processing_time_ms: float = 0.0
+
+
+@dataclass
+class RestrictionVerdict:
+    apto: bool
+    motivo: Optional[str] = None
+    fuente: str = "ingredient_analysis"  # legal_declaration | ingredient_analysis | flavoring_policy
+    confidence: float = 1.0
+    ingrediente_disparador: Optional[str] = None
 
 
 @dataclass
 class PipelineResult:
     success: bool
-    product_verdict: Optional[ProductVerdict] = None
-    ingredient_verdicts: List[IngredientVerdict] = field(default_factory=list)
+    user_verdict: bool = True
+    restrictions: Dict[str, RestrictionVerdict] = field(default_factory=dict)
+    ingredient_facts: List[IngredientFacts] = field(default_factory=list)
+    declaration: Optional[ProductLegalDeclaration] = None
     ocr_result: Optional[OCRResult] = None
-    pairs: List[tuple] = field(default_factory=list)
-    stats: Optional[PipelineStats] = None
+    overall_confidence: float = 0.0
+    stats: PipelineStats = field(default_factory=PipelineStats)
     error: Optional[str] = None
     error_type: Optional[str] = None
     status_code: int = 200
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Pipeline
+# ═══════════════════════════════════════════════════════════════════════════
+
+
 class AnalysisPipeline:
-    """Orquestador del pipeline de análisis multi-fuente."""
 
     async def run(
         self,
@@ -83,14 +119,15 @@ class AnalysisPipeline:
         user_restrictions: List[str],
         db: Session,
     ) -> PipelineResult:
-        """Ejecuta el pipeline completo de análisis."""
+        """
+        Entry-point de producción: imagen → veredicto.
+        Ejecuta Fase 1 (Gemini OCR) y delega Fases 2-6 a `run_from_text`.
+        """
         start_time = time.time()
-        stats = PipelineStats(gemini_calls=1)
 
-        # ══ FASE 1: OCR + Clasificación (1 sola llamada Gemini) ══
-        logger.info("FASE 1: OCR + Clasificación con Gemini Vision")
+        # ── FASE 1: OCR ──
+        logger.info("FASE 1: OCR con Gemini Vision")
         ocr_result = await gemini_service.extract_and_classify(image_data, image_type)
-
         if not ocr_result.success:
             status = 400 if ocr_result.error in ("poor_quality", "invalid_image") else 500
             return PipelineResult(
@@ -100,237 +137,385 @@ class AnalysisPipeline:
                 status_code=status,
             )
 
-        ingredientes_es = ocr_result.ingredients
-        gemini_classifications = ocr_result.classifications
+        ingredients_text = ", ".join(ocr_result.ingredients)
         allergen_text = ocr_result.allergen_warnings or ""
+
+        result = await self.run_from_text(
+            ingredients_text=ingredients_text,
+            allergen_text=allergen_text,
+            user_restrictions=user_restrictions,
+            db=db,
+            gemini_classifications=ocr_result.classifications,
+            start_time=start_time,
+        )
+        result.ocr_result = ocr_result
+        result.stats.gemini_calls = 1
+        return result
+
+    async def run_from_text(
+        self,
+        ingredients_text: str,
+        allergen_text: str,
+        user_restrictions: List[str],
+        db: Session,
+        gemini_classifications: Optional[Dict] = None,
+        start_time: Optional[float] = None,
+    ) -> PipelineResult:
+        """
+        Entry-point de Fases 2-6 sin depender de Gemini OCR.
+
+        Diseñado para reuso desde:
+          - el endpoint de producción `run()`, después de obtener el OCR.
+          - el harness de evaluación, alimentando texto del ground truth.
+          - tests de integración que quieran inyectar texto crudo.
+
+        `gemini_classifications` es opcional: si no se pasa, el enrichment
+        opera con menos evidencia pero sigue produciendo veredictos válidos
+        a partir de Codex INS, OFF, KB y políticas CAA.
+        """
+        if start_time is None:
+            start_time = time.time()
+        # gemini_calls=0 por default. El entry-point `run()` lo sube a 1 al
+        # ejecutar la Fase 1 paga; el harness de evaluación lo deja en 0.
+        stats = PipelineStats(gemini_calls=0)
+
+        # ── FASE 2: Parser estructural ──
+        logger.info("FASE 2: Parser estructural argentino")
+        parsed_list: List[ParsedIngredient] = parse_ingredient_list(ingredients_text)
+        declaration = parse_allergen_declaration(allergen_text or "")
         logger.info(
-            f"OCR: {len(ingredientes_es)} ingredientes, "
-            f"{len(gemini_classifications)} clasificados por Gemini"
+            f"Parser: {len(parsed_list)} ingredientes, "
+            f"{sum(1 for p in parsed_list if p.is_flavoring)} aromatizantes, "
+            f"declaración: contains={declaration.contains}, "
+            f"may_contain={declaration.may_contain}"
         )
 
-        # ══ FASE 2: Normalización (ya viene del OCR) ══
-        logger.info("FASE 2: Normalización")
+        stats.total_ingredients = len(parsed_list)
+        stats.total_flavorings = sum(1 for p in parsed_list if p.is_flavoring)
 
-        # ══ FASE 3: Traducción ES→EN (async, no bloquea event loop) ══
-        logger.info("FASE 3: Traducción ES→EN con MarianMT")
-        ingredientes_en = await translation_service.translate_batch_async(ingredientes_es)
-        pairs = list(zip(ingredientes_es, ingredientes_en))
-        logger.info(f"Traducción: {len(pairs)} pares generados")
+        # ── FASE 3: Resolución por declaración legal ──
+        logger.info("FASE 3: Resolución por declaración legal")
+        legal_verdicts: Dict[str, RestrictionVerdict] = {}
+        for restriction in user_restrictions:
+            verdict = self._resolve_by_legal_declaration(restriction, declaration)
+            if verdict is not None:
+                legal_verdicts[restriction] = verdict
+                stats.resolved_by_legal += 1
+        logger.info(f"Resueltos por declaración legal: {list(legal_verdicts.keys())}")
 
-        # ══ FASE 4: Clasificación multi-tier ══
-        logger.info("FASE 4: Clasificación multi-tier")
+        # ── FASE 4: Enrichment paralelo ──
+        logger.info("FASE 4: Enrichment paralelo")
+        ingredient_names_es = [p.name for p in parsed_list]
+        ingredient_names_en = await translation_service.translate_batch_async(ingredient_names_es)
+        translation_pairs = list(zip(ingredient_names_es, ingredient_names_en))
 
-        # Tier 1: Determinista (instantáneo)
-        logger.info("  Tier 1: Clasificación determinista")
-        tier1 = classifier.classify_batch(ingredientes_es)
-        stats.by_deterministic = len(tier1.resolved)
-
-        # Tier 2: Knowledge Base (instantáneo, 1 query SQL)
-        unresolved_after_t1 = tier1.unresolved
-        logger.info(f"  Tier 2: Knowledge Base ({len(unresolved_after_t1)} pendientes)")
-        tier2_results = knowledge_base_service.lookup_batch(unresolved_after_t1, db)
-        unresolved_after_t2 = [n for n in unresolved_after_t1 if n not in tier2_results]
-        stats.by_knowledge_base = len(tier2_results)
-        logger.info(f"  Tier 2: {len(tier2_results)} resueltos, {len(unresolved_after_t2)} pendientes")
-
-        # Tier 3: Embedding Classifier (local, ML)
-        tier3_embedding_results: Dict = {}
-        if unresolved_after_t2 and embedding_classifier.is_initialized:
-            logger.info(f"  Tier 3: Embedding Classifier ({len(unresolved_after_t2)} pendientes)")
-            embedding_classifier.refresh_from_kb(db)
-            tier3_embedding_results = embedding_classifier.classify_batch(unresolved_after_t2)
-            stats.by_embedding = len(tier3_embedding_results)
-            logger.info(f"  Tier 3: {len(tier3_embedding_results)} resueltos")
-
-        unresolved_after_t3 = [
-            n for n in unresolved_after_t2 if n not in tier3_embedding_results
-        ]
-
-        # Tiers 4-5: APIs externas (solo para lo que los tiers locales no resolvieron)
-        tier4_off_results: Dict = {}
-        tier5_pubchem_results: Dict = {}
-
-        if unresolved_after_t3:
-            unresolved_en = [en for es, en in pairs if es in unresolved_after_t3]
-            unresolved_pairs_map = {en: es for es, en in pairs if es in unresolved_after_t3}
-
-            # Tier 4: Open Food Facts
-            logger.info(f"  Tier 4: Open Food Facts ({len(unresolved_en)} ingredientes)")
-            try:
-                tier4_off_results = await openfoodfacts_service.analyze_ingredients(unresolved_en)
-                stats.by_openfoodfacts = sum(
-                    1 for r in tier4_off_results.values() if r.in_taxonomy
-                )
-            except Exception as e:
-                logger.error(f"  Tier 4 (OFF) falló: {e}")
-
-            # Tier 5: PubChem — solo para lo que OFF no reconoció
-            off_unresolved_en = [
-                name_en for name_en in unresolved_en
-                if name_en not in tier4_off_results
-                or not tier4_off_results[name_en].in_taxonomy
-            ]
-
-            if off_unresolved_en:
-                logger.info(f"  Tier 5: PubChem ({len(off_unresolved_en)} sin taxonomía OFF)")
-                try:
-                    tier5_pubchem_results = await pubchem_service.identify_compounds(
-                        off_unresolved_en
-                    )
-                    stats.by_pubchem = sum(
-                        1 for r in tier5_pubchem_results.values() if r.found
-                    )
-                except Exception as e:
-                    logger.error(f"  Tier 5 (PubChem) falló: {e}")
-            else:
-                logger.info("  Todos resueltos por OFF — PubChem omitido")
-
-        # ══ FASE 5: Análisis de texto de alérgenos ══
-        logger.info("FASE 5: Análisis de texto de alérgenos")
-        allergen_result = parse_allergen_text(allergen_text)
-
-        # ══ FASE 6: Motor de consenso ══
-        logger.info("FASE 6: Motor de consenso")
-        ingredient_verdicts: List[IngredientVerdict] = []
-
-        for name_es, name_en in pairs:
-            t1_r = tier1.resolved.get(name_es)
-            t2_r = tier2_results.get(name_es)
-            t3_emb_r = tier3_embedding_results.get(name_es)
-            t4_r = tier4_off_results.get(name_en)
-            t5_r = tier5_pubchem_results.get(name_en)
-            gemini_r = gemini_classifications.get(name_es)
-
-            verdict = consensus_engine.merge_tier_results(
-                name_es=name_es,
-                name_en=name_en,
-                tier1_result=t1_r,
-                tier2_result=t2_r,
-                tier3_embedding_result=t3_emb_r,
-                tier4_result=t4_r,
-                tier5_result=t5_r,
-                gemini_result=gemini_r,
-            )
-            ingredient_verdicts.append(verdict)
-
-        product_verdict = consensus_engine.build_product_verdict(
-            ingredient_verdicts, allergen_result, user_restrictions,
+        ingredient_facts = await enrichment_service.enrich_batch(
+            parsed=parsed_list,
+            db=db,
+            gemini_classifications=gemini_classifications,
+            translation_pairs=translation_pairs,
         )
 
-        stats.total_ingredients = len(ingredient_verdicts)
-        stats.by_gemini = sum(
-            1 for v in ingredient_verdicts if v.resolved_by == "gemini"
+        # ── FASE 4.5: LLM batch fallback ──
+        # Una sola llamada Gemini para todos los ingredientes que cayeron a
+        # tier 5 en esta imagen. Respeta el flag LLM_FALLBACK_ENABLED y persiste
+        # al KB lo que supere el threshold (futuras imágenes lo resuelven sin LLM).
+        n_llm_resolved = await enrichment_service.apply_llm_batch_fallback(
+            facts_list=ingredient_facts,
+            parsed_list=parsed_list,
+            db=db,
         )
-        stats.unresolved = sum(
-            1 for v in ingredient_verdicts if v.resolved_by == "unresolved"
-        )
+        if n_llm_resolved:
+            logger.info(f"FASE 4.5: LLM batch resolvió {n_llm_resolved} ingrediente(s)")
+
+        # Stats se calcula DESPUÉS del batch para que resolved_by_llm refleje
+        # las ingredientes que el tier 5 levantó.
+        self._tally_enrichment_stats(ingredient_facts, stats)
+
+        # ── FASE 5: Evaluación de predicados ──
+        logger.info("FASE 5: Evaluación de predicados")
+        for restriction in user_restrictions:
+            if restriction in legal_verdicts:
+                continue
+            verdict = self._evaluate_predicate_for_product(restriction, ingredient_facts)
+            legal_verdicts[restriction] = verdict
+
+        # ── FASE 6: Veredicto + confianza ──
+        user_verdict = all(v.apto for v in legal_verdicts.values())
+        confidences = [v.confidence for v in legal_verdicts.values() if v.confidence > 0]
+        overall_confidence = min(confidences) if confidences else 0.0
+
         stats.processing_time_ms = (time.time() - start_time) * 1000
 
-        processing_time = time.time() - start_time
         logger.info(
-            f"PIPELINE COMPLETADO en {processing_time:.2f}s — "
-            f"{len(ingredient_verdicts)} ingredientes, "
-            f"{stats.gemini_calls} llamada(s) Gemini"
+            f"PIPELINE COMPLETADO en {stats.processing_time_ms/1000:.2f}s — "
+            f"user_verdict={user_verdict}, conf={overall_confidence:.2f}"
         )
 
         return PipelineResult(
             success=True,
-            product_verdict=product_verdict,
-            ingredient_verdicts=ingredient_verdicts,
-            ocr_result=ocr_result,
-            pairs=pairs,
+            user_verdict=user_verdict,
+            restrictions=legal_verdicts,
+            ingredient_facts=ingredient_facts,
+            declaration=declaration,
+            ocr_result=None,
+            overall_confidence=overall_confidence,
             stats=stats,
         )
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Helpers
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def _resolve_by_legal_declaration(
+        self,
+        restriction: str,
+        declaration: ProductLegalDeclaration,
+    ) -> Optional[RestrictionVerdict]:
+        """
+        Aplica la autoridad de la declaración legal sobre una restricción.
+        Política: tanto CONTIENE como PUEDE CONTENER bloquean (conservador).
+        """
+        if declaration.declares_positive(restriction):
+            return RestrictionVerdict(
+                apto=True,
+                motivo=f"Declaración positiva del fabricante: {restriction}",
+                fuente="legal_declaration",
+                confidence=0.99,
+            )
+
+        allergen_set = _RESTRICTION_ALLERGEN_SETS.get(restriction)
+        if allergen_set is None:
+            return None
+
+        if declaration.declares_in_contains(allergen_set):
+            matched = declaration.matched_allergens(allergen_set)
+            return RestrictionVerdict(
+                apto=False,
+                motivo=f"Declaración legal CONTIENE: {', '.join(sorted(matched))}",
+                fuente="legal_declaration",
+                confidence=0.99,
+            )
+        if declaration.declares_any(allergen_set):
+            matched = declaration.matched_allergens(allergen_set)
+            return RestrictionVerdict(
+                apto=False,
+                motivo=f"Declaración legal PUEDE CONTENER: {', '.join(sorted(matched))}",
+                fuente="legal_declaration",
+                confidence=0.95,
+            )
+        return None
+
+    def _evaluate_predicate_for_product(
+        self,
+        restriction: str,
+        ingredient_facts: List[IngredientFacts],
+    ) -> RestrictionVerdict:
+        """
+        Aplica el predicado de la restricción a cada ingrediente.
+        El producto es apto si todos los ingredientes pasan.
+        """
+        confidences: List[float] = []
+        for f in ingredient_facts:
+            result: PredicateResult = evaluate_restriction(restriction, f)
+            confidences.append(result.confidence)
+            if not result.apto:
+                return RestrictionVerdict(
+                    apto=False,
+                    motivo=f"{f.name_es}: {result.motivo}",
+                    fuente="ingredient_analysis",
+                    confidence=result.confidence,
+                    ingrediente_disparador=f.name_es,
+                )
+        min_conf = min(confidences) if confidences else 0.0
+        return RestrictionVerdict(
+            apto=True,
+            fuente="ingredient_analysis",
+            confidence=min_conf,
+        )
+
+    @staticmethod
+    def _tally_enrichment_stats(
+        facts_list: List[IngredientFacts], stats: PipelineStats
+    ) -> None:
+        for f in facts_list:
+            if "codex_ins" in f.sources:
+                stats.resolved_by_codex += 1
+            elif "off_taxonomy" in f.sources:
+                stats.resolved_by_off += 1
+            elif "kb_cache" in f.sources:
+                stats.resolved_by_kb += 1
+            elif "gemini" in f.sources:
+                stats.resolved_by_gemini += 1
+            elif "llm_fallback" in f.sources:
+                stats.resolved_by_llm += 1
+            elif "policy_caa" in f.sources:
+                stats.resolved_by_policy += 1
+            else:
+                stats.unresolved += 1
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Persistencia
+    # ═══════════════════════════════════════════════════════════════════════
 
     async def persist_results(
         self,
         db: Session,
-        pipeline_result: PipelineResult,
+        pipeline_result: "PipelineResult",
         history_id: int,
         image_data: bytes,
         image_type: str,
     ) -> int:
         """
-        Fase 7: Persiste el producto y actualiza la Knowledge Base.
+        Persiste el producto, sus ingredientes y actualiza la KB.
         Retorna el ID del producto creado.
         """
         from app.models import Product, ProductIngredient
+        from app.services.knowledge_base_service import knowledge_base_service
 
-        ocr_result = pipeline_result.ocr_result
-        product_verdict = pipeline_result.product_verdict
-        ingredient_verdicts = pipeline_result.ingredient_verdicts
+        ocr = pipeline_result.ocr_result
+        restrictions = pipeline_result.restrictions
+        facts_list = pipeline_result.ingredient_facts
+        declaration = pipeline_result.declaration
         stats = pipeline_result.stats
+
+        def _restriction_field(name: str, attr: str):
+            v = restrictions.get(name)
+            if v is None:
+                return None
+            return getattr(v, attr)
+
+        result_payload = {
+            "user_verdict": pipeline_result.user_verdict,
+            "restrictions": {
+                r: {
+                    "apto": v.apto,
+                    "motivo": v.motivo,
+                    "fuente": v.fuente,
+                    "confidence": v.confidence,
+                    "ingrediente_disparador": v.ingrediente_disparador,
+                }
+                for r, v in restrictions.items()
+            },
+            "ingredients": [
+                {
+                    "name_es": f.name_es,
+                    "name_en": f.name_en,
+                    "category": f.category.value,
+                    "origin": f.origin.value,
+                    "function_tag": f.function_tag,
+                    "codex_ins_code": f.codex_ins_code,
+                    "is_flavoring": f.is_flavoring(),
+                    "flavoring_type": f.flavoring_type.value if f.flavoring_type else None,
+                    "target_sensory": f.target_sensory,
+                    "allergens": sorted(f.allergens),
+                    "contains": sorted(f.contains),
+                    "derived_from": sorted(f.derived_from),
+                    "confidence": f.confidence,
+                    "sources": f.sources,
+                    "description_es": f.description_es,
+                }
+                for f in facts_list
+            ],
+            "declaration": {
+                "contains": sorted(declaration.contains) if declaration else [],
+                "may_contain": sorted(declaration.may_contain) if declaration else [],
+                "positive_claims": sorted(declaration.positive_claims) if declaration else [],
+                "raw_text": declaration.raw_text if declaration else None,
+            },
+            "overall_confidence": pipeline_result.overall_confidence,
+        }
 
         nuevo_producto = Product(
             history_id=history_id,
             image=image_data,
             image_type=image_type,
             ocr_result_json=json.dumps({
-                "ingredients": ocr_result.ingredients,
-                "allergen_warnings": ocr_result.allergen_warnings,
-                "confidence": ocr_result.confidence,
+                "ingredients": ocr.ingredients if ocr else [],
+                "allergen_warnings": ocr.allergen_warnings if ocr else "",
+                "confidence": ocr.confidence if ocr else 0.0,
             }),
-            extracted_ingredients=json.dumps(ocr_result.ingredients),
-            allergen_warnings=ocr_result.allergen_warnings,
-            ocr_confidence=ocr_result.confidence,
-            is_tacc_safe=product_verdict.restrictions["sin_tacc"]["apto"],
-            tacc_reason=product_verdict.restrictions["sin_tacc"].get("motivo"),
-            is_lactose_safe=product_verdict.restrictions["sin_lactosa"]["apto"],
-            lactose_reason=product_verdict.restrictions["sin_lactosa"].get("motivo"),
-            is_nut_safe=product_verdict.restrictions["sin_frutos_secos"]["apto"],
-            nut_reason=product_verdict.restrictions["sin_frutos_secos"].get("motivo"),
-            is_vegan_safe=product_verdict.restrictions["vegano"]["apto"],
-            vegan_reason=product_verdict.restrictions["vegano"].get("motivo"),
-            overall_confidence=product_verdict.overall_confidence,
+            extracted_ingredients=json.dumps(ocr.ingredients if ocr else []),
+            allergen_warnings=(declaration.raw_text if declaration else None) or (ocr.allergen_warnings if ocr else None),
+            ocr_confidence=ocr.confidence if ocr else 0.0,
+            is_tacc_safe=_restriction_field("sin_tacc", "apto"),
+            tacc_reason=_restriction_field("sin_tacc", "motivo"),
+            is_lactose_safe=_restriction_field("sin_lactosa", "apto"),
+            lactose_reason=_restriction_field("sin_lactosa", "motivo"),
+            is_nut_safe=_restriction_field("sin_frutos_secos", "apto"),
+            nut_reason=_restriction_field("sin_frutos_secos", "motivo"),
+            is_vegan_safe=_restriction_field("vegano", "apto"),
+            vegan_reason=_restriction_field("vegano", "motivo"),
+            overall_confidence=pipeline_result.overall_confidence,
             processing_time_ms=stats.processing_time_ms,
-            result_json=json.dumps({
-                "restrictions": product_verdict.restrictions,
-                "ingredients": [
-                    {
-                        "name_es": v.name_es, "name_en": v.name_en,
-                        "category": v.category, "origin": v.origin,
-                        "resolved_by": v.resolved_by, "confidence": v.confidence,
-                    }
-                    for v in ingredient_verdicts
-                ],
-            }),
-            is_suitable=product_verdict.user_verdict,
+            result_json=json.dumps(result_payload),
+            is_suitable=pipeline_result.user_verdict,
             processing_status="completed",
         )
         db.add(nuevo_producto)
         db.flush()
 
-        for v in ingredient_verdicts:
-            kb_ing = knowledge_base_service.save_ingredient(
-                db=db,
-                name_es=v.name_es,
-                name_en=v.name_en,
-                category=v.category,
-                origin=v.origin,
-                function_tag=v.function_tag,
-                description_es=v.description_es,
-                is_tacc_safe=v.is_tacc_safe,
-                is_lactose_safe=v.is_lactose_safe,
-                is_nut_safe=v.is_nut_safe,
-                is_vegan_safe=v.is_vegan_safe,
-                confidence=v.confidence,
-                resolved_by=v.resolved_by,
-            )
+        for f in facts_list:
+            kb_safety = self._kb_safety_from_facts(f)
+            try:
+                kb_ing = knowledge_base_service.save_ingredient(
+                    db=db,
+                    name_es=f.name_es,
+                    name_en=f.name_en,
+                    category="ADITIVO" if f.category.value == "ADITIVO" else "BASE",
+                    origin=f.origin.value if f.origin else None,
+                    function_tag=f.function_tag,
+                    description_es=f.description_es,
+                    is_tacc_safe=kb_safety["is_tacc_safe"],
+                    is_lactose_safe=kb_safety["is_lactose_safe"],
+                    is_nut_safe=kb_safety["is_nut_safe"],
+                    is_vegan_safe=kb_safety["is_vegan_safe"],
+                    confidence=f.confidence,
+                    resolved_by=f.sources[0] if f.sources else "unresolved",
+                )
+            except Exception as e:
+                logger.warning(f"No se pudo persistir KB para '{f.name_es}': {e}")
+                kb_ing = None
 
             pi = ProductIngredient(
                 product_id=nuevo_producto.id,
-                ingredient_id=kb_ing.id,
-                detected_name=v.name_es,
-                name_en=v.name_en,
-                is_base_ingredient=(v.category == "BASE"),
-                resolved_by=v.resolved_by,
-                confidence=v.confidence,
-                evidence_json=json.dumps(v.evidence),
+                ingredient_id=kb_ing.id if kb_ing else None,
+                detected_name=f.name_es,
+                name_en=f.name_en,
+                is_base_ingredient=(f.category.value == "BASE"),
+                resolved_by=f.sources[0] if f.sources else "unresolved",
+                confidence=f.confidence,
+                evidence_json=json.dumps([
+                    {"source": p.source, "evidence": p.evidence, "confidence": p.confidence}
+                    for entries in f.tag_provenance.values() for p in entries
+                ]),
             )
             db.add(pi)
 
         db.commit()
         return nuevo_producto.id
+
+    @staticmethod
+    def _kb_safety_from_facts(f: IngredientFacts) -> Dict[str, Optional[bool]]:
+        gluten_derived = {"wheat", "barley", "rye", "oats"}
+        dairy_derived = {"milk", "dairy"}
+        is_tacc_safe = not (
+            bool(f.allergens & GLUTEN_SOURCES) or bool(f.derived_from & gluten_derived)
+        )
+        is_lactose_safe = not (
+            bool(f.allergens & DAIRY_SOURCES) or bool(f.derived_from & dairy_derived)
+        )
+        is_nut_safe = not bool(f.allergens & NUT_SOURCES)
+        from app.services.ingredient_facts import Origin
+        is_vegan_safe = not (
+            bool(f.allergens & ANIMAL_SOURCES) or f.origin == Origin.ANIMAL
+        )
+        return {
+            "is_tacc_safe": is_tacc_safe,
+            "is_lactose_safe": is_lactose_safe,
+            "is_nut_safe": is_nut_safe,
+            "is_vegan_safe": is_vegan_safe,
+        }
 
 
 analysis_pipeline = AnalysisPipeline()

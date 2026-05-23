@@ -64,21 +64,25 @@ SUPPORTED_RESTRICTIONS = {
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Pesos de confianza por tier — FUENTE ÚNICA DE VERDAD
+# Pesos de confianza por fuente — FUENTE ÚNICA DE VERDAD
 #
 # Justificación de pesos:
-#   allergen_text  0.98 — Declaración legal del fabricante (ANMAT/Código Alimentario)
-#   deterministic  0.97 — Reglas factuales verificables (keywords, INS codes)
-#   knowledge_base 0.93 — Ingredientes previamente verificados por el sistema
-#   embedding      0.88 — Inferencia semántica sobre datos curados (modelo local)
-#   openfoodfacts  0.85 — Base de datos comunitaria con taxonomía global
-#   pubchem        0.75 — Identificación química, clasificación inferida
-#   gemini         0.65 — LLM puede alucinar, se usa como último recurso
+#   allergen_text        0.98 — Declaración legal del fabricante (ANMAT)
+#   deterministic        0.97 — Guardrail de alérgenos (keywords factuales)
+#   ins_parser           0.94 — Codex Alimentarius (parsing estructural)
+#   knowledge_base       0.93 — Ingredientes previamente verificados
+#   gemini_function_rule 0.90 — Regla funcional (saborizante/aromatizante → safe)
+#   embedding            0.88 — Similitud semántica con modelo local
+#   openfoodfacts        0.85 — Base de datos comunitaria con taxonomía global
+#   pubchem              0.75 — Identificación química, clasificación inferida
+#   gemini               0.65 — LLM puede alucinar, se usa como último recurso
 # ═══════════════════════════════════════════════════════════════════════════════
 TIER_WEIGHTS = {
     "allergen_text": 0.98,
     "deterministic": 0.97,
+    "ins_parser": 0.94,
     "knowledge_base": 0.93,
+    "gemini_function_rule": 0.90,
     "embedding": 0.88,
     "openfoodfacts": 0.85,
     "pubchem": 0.75,

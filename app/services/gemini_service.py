@@ -16,6 +16,8 @@ import json
 import logging
 import io
 import asyncio
+import time
+from collections import deque
 from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 
@@ -31,6 +33,39 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = genai.GenerativeModel("gemini-2.0-flash-lite")
+
+
+# ── Rate limiter para el free tier de Gemini ──
+# Free tier de gemini-2.0-flash: 15 RPM. Mantenemos margen y permitimos 12 RPM
+# para no rozar el límite con clock skew. El limiter es global porque la cuota
+# se aplica por API key, no por request.
+_RPM_LIMIT = 12
+_RATE_WINDOW_S = 60.0
+_call_timestamps: deque = deque(maxlen=_RPM_LIMIT)
+_rate_lock = asyncio.Lock()
+
+
+def _extract_retry_delay(msg: str) -> Optional[int]:
+    """Parsea el `retry_delay { seconds: N }` del mensaje 429 de Gemini."""
+    m = re.search(r"retry_delay\s*\{\s*seconds:\s*(\d+)", msg)
+    return int(m.group(1)) if m else None
+
+
+async def _rate_limit_acquire() -> None:
+    """Bloquea hasta que sea seguro hacer una nueva llamada bajo el RPM limit."""
+    async with _rate_lock:
+        now = time.monotonic()
+        # Purgar timestamps fuera de la ventana
+        while _call_timestamps and now - _call_timestamps[0] > _RATE_WINDOW_S:
+            _call_timestamps.popleft()
+        if len(_call_timestamps) >= _RPM_LIMIT:
+            wait = _RATE_WINDOW_S - (now - _call_timestamps[0]) + 0.1
+            logger.info(f"Gemini rate limit alcanzado, esperando {wait:.1f}s")
+            await asyncio.sleep(wait)
+            now = time.monotonic()
+            while _call_timestamps and now - _call_timestamps[0] > _RATE_WINDOW_S:
+                _call_timestamps.popleft()
+        _call_timestamps.append(now)
 
 
 @dataclass
@@ -61,6 +96,56 @@ class OCRResult:
 
 class GeminiService:
     """OCR de etiquetas con clasificación de ingredientes en una sola llamada."""
+
+    async def generate_text(
+        self,
+        prompt: str,
+        model_name: str = "gemini-2.0-flash",
+        temperature: float = 0.1,
+        response_mime_type: Optional[str] = None,
+        timeout: float = 10.0,
+        max_retries: int = 2,
+    ) -> Optional[str]:
+        """
+        Llamada text-only a Gemini para servicios auxiliares del pipeline.
+
+        Maneja 429 (rate limit) reintentando hasta `max_retries` veces. Respeta
+        el `retry_delay` que devuelve la API si lo extrae del mensaje.
+        """
+        generation_config = {"temperature": temperature}
+        if response_mime_type:
+            generation_config["response_mime_type"] = response_mime_type
+
+        attempt = 0
+        while True:
+            await _rate_limit_acquire()
+            try:
+                text_model = genai.GenerativeModel(
+                    model_name,
+                    generation_config=generation_config,
+                )
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(text_model.generate_content, prompt),
+                    timeout=timeout,
+                )
+                return getattr(response, "text", None)
+            except asyncio.TimeoutError:
+                logger.error(f"Timeout Gemini text-only ({timeout}s)")
+                return None
+            except Exception as e:
+                msg = str(e)
+                is_429 = "429" in msg or "ResourceExhausted" in type(e).__name__
+                if is_429 and attempt < max_retries:
+                    delay = _extract_retry_delay(msg) or (5 * (attempt + 1))
+                    logger.warning(
+                        f"Gemini 429 (intento {attempt+1}/{max_retries}), "
+                        f"esperando {delay}s antes de reintentar"
+                    )
+                    await asyncio.sleep(delay)
+                    attempt += 1
+                    continue
+                logger.error(f"Error Gemini text-only: {type(e).__name__}: {e}")
+                return None
 
     async def extract_and_classify(
         self, image_content: bytes, image_type: str

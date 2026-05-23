@@ -1,332 +1,271 @@
 """
-Evaluación formal de NutriGuide contra el ground truth.
+Smoke test / evaluación del pipeline contra el ground truth.
 
-Modos de evaluación:
-  1. tier1_only:       Solo clasificador determinista (sin texto de alérgenos)
-  2. tier1_allergens:  Tier 1 + parser de alérgenos (lo que corre offline)
-  3. tier1_ablation:   Tier 1 descompuesto (INS, keywords, safe, unresolved)
+Ejecuta las Fases 2-6 del pipeline (parser → resolución legal →
+enrichment → predicados → veredicto) sobre cada producto del dataset,
+saltando la Fase 1 (Gemini Vision) — usamos los ingredientes y texto de
+alérgenos transcritos manualmente como si vinieran del OCR.
 
-Genera métricas de precisión, recall, F1 y matrices de confusión
-que son requeridas para la defensa de tesis.
+NO contiene reglas hardcodeadas por ingrediente: todas las expectativas
+vienen de Dataset/ground_truth.py, todas las reglas vienen del fact base
+(IngredientFacts) y los predicados declarativos del pipeline v3.
 
 Uso:
-  python -m evaluation.evaluate
+    python -m evaluation.evaluate_v3
+    python -m evaluation.evaluate_v3 --product foto17_caldo
+    python -m evaluation.evaluate_v3 --skip-init      # asume servicios ya cargados
+
+Costo: $0 — no llama a Gemini. Sí carga MarianMT y sentence-transformers
+una vez al inicio (~450MB de modelos pre-entrenados).
 """
 
-import sys
+import argparse
+import asyncio
+import logging
 import os
-from typing import Dict, List, Optional
+import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+logging.basicConfig(level=logging.WARNING)
+logger = logging.getLogger(__name__)
+
 from Dataset.ground_truth import GROUND_TRUTH
-from app.services.deterministic_classifier import (
-    DeterministicClassifier, IngredientResult, ALL_RESTRICTIONS,
+from app.database.connection import get_db, init_database
+from app.services.analysis_pipeline import (
+    AnalysisPipeline,
+    PipelineResult,
+    analysis_pipeline,
 )
-from app.utils.allergen_parser import parse_allergen_text, AllergenParseResult, POSITIVE_DECLARATION_MAP
-from app.services.consensus_engine import (
-    ConsensusEngine, IngredientVerdict, ProductVerdict,
-    MEDICAL_RESTRICTIONS, _RESTRICTION_FIELD,
-)
+from app.services.restriction_predicates import ALL_RESTRICTIONS
+from app.utils.initialization import initialize_system
 from evaluation.metrics import (
-    EvaluationReport, ProductResult, ConfusionMatrix,
-    format_report, format_comparison,
-    ALL_RESTRICTIONS as METRIC_RESTRICTIONS,
+    EvaluationReport,
+    ProductResult,
     RESTRICTION_DISPLAY,
+    format_report,
 )
 
-classifier = DeterministicClassifier()
-consensus = ConsensusEngine()
+
+def _ingredients_text(case: dict) -> str:
+    """
+    Reconstruye el texto crudo de la lista de ingredientes a partir del
+    ground truth. El parser espera el formato de etiqueta argentina
+    (separación por comas con prefijos de función opcionales tipo
+    "función: ingrediente").
+    """
+    return ", ".join(case["ingredientes"])
 
 
-def _tier1_to_verdict(r: IngredientResult) -> IngredientVerdict:
-    """Convierte un IngredientResult de Tier 1 a IngredientVerdict."""
-    return IngredientVerdict(
-        name_es=r.name,
-        name_en="",
-        category=r.category,
-        is_tacc_safe=r.is_tacc_safe,
-        is_lactose_safe=r.is_lactose_safe,
-        is_nut_safe=r.is_nut_safe,
-        is_vegan_safe=r.is_vegan_safe,
-        confidence=r.confidence,
-        resolved_by=r.resolved_by,
-        evidence=r.evidence[:],
+async def _evaluate_one(
+    product_id: str,
+    case: dict,
+    pipeline: AnalysisPipeline,
+    db,
+) -> tuple[PipelineResult, ProductResult]:
+    ingredients_text = _ingredients_text(case)
+    allergen_text = case.get("alergenos") or ""
+
+    result = await pipeline.run_from_text(
+        ingredients_text=ingredients_text,
+        allergen_text=allergen_text,
+        user_restrictions=list(ALL_RESTRICTIONS),
+        db=db,
     )
 
+    pr = ProductResult(product_id=product_id, product_name=case["nombre"])
+    expected = case["expected"]
+    all_ok = True
 
-def _build_verdict_from_tier1(
-    ingredients: List[str],
-    allergen_text: str,
-    use_allergens: bool = True,
-) -> ProductVerdict:
-    """Ejecuta Tier 1 + opcionalmente alérgenos y construye el veredicto."""
-    tier1 = classifier.classify_batch(ingredients)
-
-    verdicts: List[IngredientVerdict] = []
-    for name in ingredients:
-        if name in tier1.resolved:
-            verdicts.append(_tier1_to_verdict(tier1.resolved[name]))
+    for restriction in ALL_RESTRICTIONS:
+        verdict = result.restrictions.get(restriction)
+        if verdict is None:
+            # Defensivo: si por alguna razón el pipeline no produjo veredicto
+            # para una restricción solicitada, lo contamos como no-apto para
+            # que cuente como falla en métricas.
+            predicted_apto = False
+            motivo = "veredicto no producido por el pipeline"
+            fuente = "missing"
         else:
-            r = classifier.classify_ingredient(name)
-            verdicts.append(_tier1_to_verdict(r))
+            predicted_apto = verdict.apto
+            motivo = verdict.motivo
+            fuente = verdict.fuente
 
-    if use_allergens:
-        allergen_result = parse_allergen_text(allergen_text)
-    else:
-        allergen_result = AllergenParseResult()
+        is_correct = predicted_apto == expected[restriction]
+        pr.restriction_results[restriction] = {
+            "expected": expected[restriction],
+            "predicted": predicted_apto,
+            "correct": is_correct,
+            "motivo": motivo,
+            "fuente": fuente,
+        }
 
-    return consensus.build_product_verdict(verdicts, allergen_result, [])
+        if not is_correct:
+            all_ok = False
+            exp_str = "APTO" if expected[restriction] else "NO APTO"
+            pred_str = "APTO" if predicted_apto else "NO APTO"
+            danger = ""
+            if not expected[restriction] and predicted_apto:
+                danger = " [!] FALSO NEGATIVO (peligroso)"
+            pr.errors.append(
+                f"{RESTRICTION_DISPLAY[restriction]}: "
+                f"esperado={exp_str}, obtenido={pred_str} "
+                f"(motivo: {motivo}; fuente: {fuente}){danger}"
+            )
+
+    pr.all_correct = all_ok
+    return result, pr
 
 
-def evaluate_mode(
-    mode: str,
-    use_allergens: bool,
-) -> EvaluationReport:
-    """Evalúa todos los productos del ground truth en un modo dado."""
-    report = EvaluationReport(mode=mode)
+async def run_evaluation(only_product: str | None = None) -> EvaluationReport:
+    report = EvaluationReport(mode="V3 pipeline (sin Gemini OCR)")
+    pipeline = analysis_pipeline
+    db = next(get_db())
 
-    for product_id, data in GROUND_TRUTH.items():
-        if data.get("mala_calidad"):
+    aggregated_stats = {
+        "total_ingredients": 0,
+        "total_flavorings": 0,
+        "resolved_by_legal": 0,
+        "resolved_by_codex": 0,
+        "resolved_by_off": 0,
+        "resolved_by_kb": 0,
+        "resolved_by_gemini": 0,
+        "resolved_by_llm": 0,
+        "resolved_by_policy": 0,
+        "unresolved": 0,
+        "total_time_ms": 0.0,
+    }
+
+    cases = GROUND_TRUTH.items()
+    if only_product:
+        cases = [(only_product, GROUND_TRUTH[only_product])]
+
+    total_start = time.time()
+    for product_id, case in cases:
+        if case.get("mala_calidad"):
             report.skipped_bad_quality += 1
             continue
 
-        ingredients = data["ingredientes"]
-        allergen_text = data.get("alergenos", "")
-        expected = data["expected"]
-
-        verdict = _build_verdict_from_tier1(
-            ingredients, allergen_text, use_allergens=use_allergens,
-        )
+        try:
+            result, pr = await _evaluate_one(product_id, case, pipeline, db)
+        except Exception as e:
+            logger.exception(f"Excepción evaluando {product_id}")
+            pr = ProductResult(product_id=product_id, product_name=case["nombre"])
+            pr.all_correct = False
+            pr.errors.append(f"EXCEPCIÓN: {type(e).__name__}: {e}")
+            report.product_results.append(pr)
+            report.total_products += 1
+            continue
 
         report.total_products += 1
-        pr = ProductResult(product_id=product_id, product_name=data["nombre"])
-
-        all_ok = True
-        for restriction in ALL_RESTRICTIONS:
-            expected_apto = expected[restriction]
-            predicted_apto = verdict.restrictions[restriction]["apto"]
-            motivo = verdict.restrictions[restriction].get("motivo")
-
-            report.record(product_id, data["nombre"],
-                          restriction, predicted_apto, expected_apto, motivo)
-
-            is_correct = predicted_apto == expected_apto
-            pr.restriction_results[restriction] = {
-                "expected": expected_apto,
-                "predicted": predicted_apto,
-                "correct": is_correct,
-                "motivo": motivo,
-            }
-
-            if not is_correct:
-                all_ok = False
-                exp_str = "APTO" if expected_apto else "NO APTO"
-                pred_str = "APTO" if predicted_apto else "NO APTO"
-
-                danger = ""
-                if not expected_apto and predicted_apto:
-                    danger = " [!] PELIGROSO: falso negativo"
-
-                err = (f"{RESTRICTION_DISPLAY[restriction]}: "
-                       f"esperado={exp_str}, obtenido={pred_str}"
-                       f" (motivo: {motivo}){danger}")
-                pr.errors.append(err)
-
-        pr.all_correct = all_ok
-        if all_ok:
-            report.products_correct += 1
         report.product_results.append(pr)
+        if pr.all_correct:
+            report.products_correct += 1
+
+        for restriction in ALL_RESTRICTIONS:
+            r = pr.restriction_results[restriction]
+            report.record(
+                product_id=product_id,
+                product_name=case["nombre"],
+                restriction=restriction,
+                predicted_apto=r["predicted"],
+                expected_apto=r["expected"],
+                motivo=r["motivo"],
+            )
+
+        aggregated_stats["total_ingredients"] += result.stats.total_ingredients
+        aggregated_stats["total_flavorings"] += result.stats.total_flavorings
+        aggregated_stats["resolved_by_legal"] += result.stats.resolved_by_legal
+        aggregated_stats["resolved_by_codex"] += result.stats.resolved_by_codex
+        aggregated_stats["resolved_by_off"] += result.stats.resolved_by_off
+        aggregated_stats["resolved_by_kb"] += result.stats.resolved_by_kb
+        aggregated_stats["resolved_by_gemini"] += result.stats.resolved_by_gemini
+        aggregated_stats["resolved_by_llm"] += result.stats.resolved_by_llm
+        aggregated_stats["resolved_by_policy"] += result.stats.resolved_by_policy
+        aggregated_stats["unresolved"] += result.stats.unresolved
+        aggregated_stats["total_time_ms"] += result.stats.processing_time_ms
+
+    total_time = time.time() - total_start
+    db.close()
+
+    print(format_report(report))
+    _print_pipeline_stats(aggregated_stats, total_time, report.total_products)
 
     return report
 
 
-def evaluate_tier1_components() -> Dict[str, EvaluationReport]:
-    """Evalúa cada componente del Tier 1 por separado (ablation intra-tier)."""
-    components = {
-        "tier1_ins_only": "Solo códigos INS/E",
-        "tier1_keywords_only": "Solo keywords",
-        "tier1_safe_only": "Solo ingredientes seguros",
-    }
-
-    reports = {}
-    for component_key, component_name in components.items():
-        report = EvaluationReport(mode=component_name)
-
-        for product_id, data in GROUND_TRUTH.items():
-            if data.get("mala_calidad"):
-                report.skipped_bad_quality += 1
-                continue
-
-            ingredients = data["ingredientes"]
-            expected = data["expected"]
-            report.total_products += 1
-
-            verdicts: List[IngredientVerdict] = []
-            for name in ingredients:
-                r = classifier.classify_ingredient(name)
-
-                include = False
-                if component_key == "tier1_ins_only" and "ins" in r.resolved_by:
-                    include = True
-                elif component_key == "tier1_keywords_only" and "keyword" in r.resolved_by:
-                    include = True
-                elif component_key == "tier1_safe_only" and "safe" in r.resolved_by:
-                    include = True
-
-                if include:
-                    verdicts.append(_tier1_to_verdict(r))
-                else:
-                    verdicts.append(IngredientVerdict(
-                        name_es=name, name_en="", category=r.category,
-                    ))
-
-            allergen_result = AllergenParseResult()
-            pv = consensus.build_product_verdict(verdicts, allergen_result, [])
-
-            pr = ProductResult(product_id=product_id, product_name=data["nombre"])
-            all_ok = True
-            for restriction in ALL_RESTRICTIONS:
-                expected_apto = expected[restriction]
-                predicted_apto = pv.restrictions[restriction]["apto"]
-                report.record(product_id, data["nombre"],
-                              restriction, predicted_apto, expected_apto)
-                if predicted_apto != expected_apto:
-                    all_ok = False
-
-            pr.all_correct = all_ok
-            if all_ok:
-                report.products_correct += 1
-            report.product_results.append(pr)
-
-        reports[component_key] = report
-
-    return reports
-
-
-def evaluate_tier1_resolution_stats():
-    """Estadísticas de resolución del Tier 1 sobre el ground truth."""
-    total_ingredients = 0
-    resolved_ins = 0
-    resolved_keyword = 0
-    resolved_safe = 0
-    unresolved = 0
-    unique_ingredients = set()
-    unique_unresolved = set()
-
-    for product_id, data in GROUND_TRUTH.items():
-        if data.get("mala_calidad"):
-            continue
-        for name in data["ingredientes"]:
-            total_ingredients += 1
-            unique_ingredients.add(classifier.normalize(name))
-            r = classifier.classify_ingredient(name)
-            if "ins" in r.resolved_by:
-                resolved_ins += 1
-            elif "keyword" in r.resolved_by:
-                resolved_keyword += 1
-            elif "safe" in r.resolved_by:
-                resolved_safe += 1
-            else:
-                unresolved += 1
-                unique_unresolved.add(classifier.normalize(name))
-
-    total_resolved = resolved_ins + resolved_keyword + resolved_safe
-    lines = []
+def _print_pipeline_stats(stats: dict, total_time: float, n_products: int) -> None:
     w = 80
-    lines.append("")
-    lines.append("=" * w)
-    lines.append("  ESTADISTICAS DE RESOLUCION -- TIER 1 DETERMINISTA")
-    lines.append("=" * w)
-    lines.append(f"  Total ingredientes analizados:    {total_ingredients}")
-    lines.append(f"  Ingredientes unicos:              {len(unique_ingredients)}")
-    lines.append("")
-    lines.append(f"  Resueltos por INS/E:              {resolved_ins:>4} ({resolved_ins/total_ingredients:.1%})")
-    lines.append(f"  Resueltos por keywords:           {resolved_keyword:>4} ({resolved_keyword/total_ingredients:.1%})")
-    lines.append(f"  Resueltos por safe list:          {resolved_safe:>4} ({resolved_safe/total_ingredients:.1%})")
-    lines.append(f"  ---------------------------------------")
-    lines.append(f"  Total resueltos:                  {total_resolved:>4} ({total_resolved/total_ingredients:.1%})")
-    lines.append(f"  No resueltos (necesitan Tier 2+): {unresolved:>4} ({unresolved/total_ingredients:.1%})")
-    lines.append("")
+    print("=" * w)
+    print("  ESTADÍSTICAS DEL PIPELINE V3 (agregadas sobre dataset)")
+    print("=" * w)
 
-    if unique_unresolved:
-        lines.append(f"  Ingredientes unicos no resueltos ({len(unique_unresolved)}):")
-        for u in sorted(unique_unresolved):
-            lines.append(f"    • {u}")
+    n = stats["total_ingredients"]
+    if n == 0:
+        print("  (sin ingredientes procesados)")
+        return
 
-    lines.append("=" * w)
-    return "\n".join(lines)
+    def pct(x: int) -> str:
+        return f"{x:>4} ({x / n:>5.1%})"
 
-
-def export_csv(reports: List[EvaluationReport], filepath: str):
-    """Exporta resultados a CSV para análisis externo o inclusión en la tesis."""
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write("Modo,Restriccion,Accuracy,Precision,Recall,F1,FNR,TP,FP,TN,FN\n")
-        for report in reports:
-            for r in ALL_RESTRICTIONS:
-                cm = report.confusion_matrices[r]
-                display = RESTRICTION_DISPLAY[r]
-                f.write(
-                    f"{report.mode},{display},"
-                    f"{cm.accuracy:.4f},{cm.precision:.4f},"
-                    f"{cm.recall:.4f},{cm.f1:.4f},"
-                    f"{cm.false_negative_rate:.4f},"
-                    f"{cm.tp},{cm.fp},{cm.tn},{cm.fn}\n"
-                )
+    print(f"  Productos evaluados:               {n_products}")
+    print(f"  Ingredientes totales:              {n}")
+    print(f"  Aromatizantes detectados:          {stats['total_flavorings']}")
+    print()
+    print(f"  Resolución por fuente (de {n} ingredientes):")
+    print(f"    Declaración legal (cortocircuito): {pct(stats['resolved_by_legal'])}")
+    print(f"    Codex INS:                         {pct(stats['resolved_by_codex'])}")
+    print(f"    Open Food Facts taxonomy:          {pct(stats['resolved_by_off'])}")
+    print(f"    Knowledge Base local:              {pct(stats['resolved_by_kb'])}")
+    print(f"    Gemini pre-clasificación:          {pct(stats['resolved_by_gemini'])}")
+    print(f"    Resuelto por LLM:                  {pct(stats['resolved_by_llm'])}")
+    print(f"    Política CAA / reglas internas:    {pct(stats['resolved_by_policy'])}")
+    print(f"    No resueltos:                      {pct(stats['unresolved'])}")
+    print()
+    print(f"  Tiempo total de pipeline:          {stats['total_time_ms']/1000:.2f}s")
+    print(f"  Wall clock (incluye init/translate): {total_time:.2f}s")
+    print(f"  Promedio por producto:             {stats['total_time_ms']/max(n_products,1):.0f}ms")
+    print("=" * w)
 
 
-def main():
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Evalúa el pipeline contra el ground truth (sin Gemini OCR).")
+    parser.add_argument("--product", default=None, help="Evaluar un solo producto por id (e.g. foto17_caldo)")
+    parser.add_argument("--skip-init", action="store_true", help="Saltar initialize_system (asume servicios ya cargados)")
+    args = parser.parse_args()
+
     print("\n" + "#" * 80)
-    print("#" + " " * 15 + "NUTRIGUIDE -- EVALUACION FORMAL PARA TESIS" + " " * 20 + "#")
+    print("#  NUTRIGUIDE — EVALUACIÓN PIPELINE V3 (FACT BASE / RULE BASE)")
     print("#" * 80)
+    print()
 
-    report_tier1 = evaluate_mode("Tier 1 (determinista)", use_allergens=False)
-    print(format_report(report_tier1))
+    init_database()
 
-    report_tier1_allergens = evaluate_mode("Tier 1 + Alergenos", use_allergens=True)
-    print(format_report(report_tier1_allergens))
+    if not args.skip_init:
+        print("  Inicializando servicios (MarianMT, embeddings, loaders, KB)...")
+        try:
+            initialize_system()
+            print("  Servicios listos.\n")
+        except Exception as e:
+            print(f"  [!] initialize_system falló: {e}")
+            print("      Continuando con servicios degradados.\n")
 
-    print(evaluate_tier1_resolution_stats())
+    report = asyncio.run(run_evaluation(only_product=args.product))
 
-    component_reports = evaluate_tier1_components()
-    all_reports = [
-        report_tier1,
-        report_tier1_allergens,
-    ] + list(component_reports.values())
+    total_fn = sum(cm.fn for cm in report.confusion_matrices.values())
+    total_fp = sum(cm.fp for cm in report.confusion_matrices.values())
 
-    print(format_comparison([report_tier1, report_tier1_allergens] + list(component_reports.values())))
+    print()
+    print(f"  Productos 100% correctos:   {report.products_correct}/{report.total_products} ({report.product_accuracy:.1%})")
+    print(f"  Accuracy global:            {report.overall_accuracy:.1%}")
+    print(f"  Macro F1:                   {report.macro_f1:.1%}")
+    print(f"  Macro recall:               {report.macro_recall:.1%}")
+    print(f"  Falsos negativos (peligro): {total_fn}")
+    print(f"  Falsos positivos (rechazo): {total_fp}")
+    print()
 
-    # ─── Exportar CSV ───
-    csv_path = os.path.join(os.path.dirname(__file__), "resultados.csv")
-    export_csv(all_reports, csv_path)
-    print(f"\n  Resultados exportados a: {csv_path}")
-
-    print("\n" + "#" * 80)
-    print("#" + " " * 22 + "RESUMEN EJECUTIVO" + " " * 39 + "#")
-    print("#" * 80)
-
-    best = report_tier1_allergens
-    print(f"""
-  Modo mas completo evaluado: {best.mode}
-  -----------------------------------------
-  Productos evaluados:        {best.total_products}
-  Productos 100%% correctos:   {best.products_correct}/{best.total_products} ({best.product_accuracy:.1%})
-  Accuracy global:            {best.overall_accuracy:.1%}
-  Macro F1-Score:             {best.macro_f1:.1%}
-  Macro Recall:               {best.macro_recall:.1%}
-  Falsos negativos totales:   {sum(cm.fn for cm in best.confusion_matrices.values())}
-""")
-
-    total_fn = sum(cm.fn for cm in best.confusion_matrices.values())
-    if total_fn == 0:
-        print("  [OK] SEGURIDAD: Cero falsos negativos. Ningun producto inseguro")
-        print("       fue clasificado como seguro para el usuario.")
-    else:
-        print(f"  [!!] ATENCION: {total_fn} falsos negativos detectados.")
-        print("       Estos son errores de seguridad que deben corregirse.")
-
-    print("\n" + "#" * 80)
-    return 0
+    return 0 if total_fn == 0 else 1
 
 
 if __name__ == "__main__":

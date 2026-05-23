@@ -1,0 +1,132 @@
+
+################################################################################
+#  NUTRIGUIDE — EVALUACIÓN PIPELINE V3 (FACT BASE / RULE BASE)
+################################################################################
+
+  Inicializando servicios (MarianMT, embeddings, loaders, KB)...
+  Servicios listos.
+
+================================================================================
+  EVALUACION NUTRIGUIDE -- V3 PIPELINE (SIN GEMINI OCR)
+  Productos evaluados: 42 (excluidos por mala calidad: 2)
+================================================================================
+
+--------------------------------------------------------------------------------
+  RESULTADOS POR PRODUCTO
+--------------------------------------------------------------------------------
+  [OK] foto1: Avena arrollada -- OK
+  [OK] foto2: Cereales de maíz (tipo Zucaritas) -- OK
+  [OK] foto3: Galletitas (tipo Criollitas) -- OK
+  [OK] foto4: Snack de maíz (tipo Doritos) -- OK
+  [OK] foto5: Salsa de tomate (tipo ketchup) -- OK
+  [OK] foto6: Harina de trigo vitaminizada -- OK
+  [OK] foto7: Almidón de maíz (Maizena) -- OK
+  [OK] foto8: Harina vitaminizada (idéntica a foto 6) -- OK
+  [OK] foto9: Harina de trigo 000 -- OK
+  [OK] foto10: Mayonesa/aderezo -- OK
+  [OK] foto11: Ketchup -- OK
+  [OK] foto12: Mostaza -- OK
+  [OK] foto13: Harina 0000 -- OK
+  [OK] foto14: Chocolatada en polvo (Nesquik) -- OK
+  [OK] foto15: Sal (Celusal) -- OK
+  [OK] foto16: Tapas de empanadas -- OK
+  [OK] foto17: Caldo en cubo (Knorr) -- OK
+  [OK] foto18: Sopa instantánea (Knorr) -- OK
+  [OK] foto19: Tomate pelado enlatado -- OK
+  [OK] foto20: Puré de tomate -- OK
+  [OK] foto21: Atún en lata -- OK
+  [OK] foto22: Fideos al huevo -- OK
+  [OK] foto23: Harina de trigo -- OK
+  [OK] foto24: Fideos de sémola -- OK
+  [OK] foto27: Galletitas de chocolate (tipo Pepitos) -- OK
+  [OK] foto28: Jugo de naranja -- OK
+  [OK] foto29: Postre lácteo de chocolate -- OK
+  [OK] foto30: Snack de maíz sabor queso -- OK
+  [OK] foto31: Pan lactal -- OK
+  [OK] foto32: Mermelada de frutilla light -- OK
+  [OK] foto33: Salchicha -- OK
+  [OK] foto34: Pan de queso / chipá -- OK
+  [OK] foto35: Galletitas de agua (tipo Traviata) -- OK
+  [OK] foto36: Jugo en polvo sabor manzana -- OK
+  [OK] foto37: Mayonesa -- OK
+  [OK] foto38: Yogur de durazno -- OK
+  [OK] foto39: Pan dulce -- OK
+  [OK] foto40: Salsa de soja -- OK
+  [OK] foto41: Gomitas -- OK
+  [OK] foto42: Cereales (tipo Corn Flakes) -- OK
+  [OK] foto43: Alfajor de chocolate -- OK
+  [OK] foto44: Sopa de pollo con fideos -- OK
+
+  Productos 100% correctos: 42/42 (100.0%)
+
+--------------------------------------------------------------------------------
+  METRICAS POR RESTRICCION
+--------------------------------------------------------------------------------
+  Restriccion               Acc   Prec    Rec     F1    FNR   TP  FP  TN  FN
+  ----------------------------------------------------------------------------
+  Sin TACC               100.0% 100.0% 100.0% 100.0%  0.0%   25   0  17   0
+  Sin Lactosa            100.0% 100.0% 100.0% 100.0%  0.0%   14   0  28   0
+  Sin Frutos Secos       100.0% 100.0% 100.0% 100.0%  0.0%    7   0  35   0
+  Vegano                 100.0% 100.0% 100.0% 100.0%  0.0%   25   0  17   0
+  ----------------------------------------------------------------------------
+  GLOBAL (macro)         100.0%        100.0% 100.0%
+
+--------------------------------------------------------------------------------
+  MATRICES DE CONFUSION (filas=real, cols=predicho)
+--------------------------------------------------------------------------------
+
+  Sin TACC:
+                         Pred NO APTO      Pred APTO
+          Real NO APTO             25              0
+             Real APTO              0             17
+
+  Sin Lactosa:
+                         Pred NO APTO      Pred APTO
+          Real NO APTO             14              0
+             Real APTO              0             28
+
+  Sin Frutos Secos:
+                         Pred NO APTO      Pred APTO
+          Real NO APTO              7              0
+             Real APTO              0             35
+
+  Vegano:
+                         Pred NO APTO      Pred APTO
+          Real NO APTO             25              0
+             Real APTO              0             17
+
+--------------------------------------------------------------------------------
+  ANALISIS DE SEGURIDAD
+--------------------------------------------------------------------------------
+  [OK] CERO falsos negativos -- ningun producto inseguro fue marcado como seguro
+
+================================================================================
+================================================================================
+  ESTADÍSTICAS DEL PIPELINE V3 (agregadas sobre dataset)
+================================================================================
+  Productos evaluados:               42
+  Ingredientes totales:              419
+  Aromatizantes detectados:          21
+
+  Resolución por fuente (de 419 ingredientes):
+    Declaración legal (cortocircuito):   71 (16.9%)
+    Codex INS:                           10 ( 2.4%)
+    Open Food Facts taxonomy:            63 (15.0%)
+    Knowledge Base local:               318 (75.9%)
+    Gemini pre-clasificación:             0 ( 0.0%)
+    Resuelto por LLM:                     7 ( 1.7%)
+    Política CAA / reglas internas:      21 ( 5.0%)
+    No resueltos:                         0 ( 0.0%)
+
+  Tiempo total de pipeline:          33.61s
+  Wall clock (incluye init/translate): 33.61s
+  Promedio por producto:             800ms
+================================================================================
+
+  Productos 100% correctos:   42/42 (100.0%)
+  Accuracy global:            100.0%
+  Macro F1:                   100.0%
+  Macro recall:               100.0%
+  Falsos negativos (peligro): 0
+  Falsos positivos (rechazo): 0
+

@@ -29,6 +29,7 @@ class Ingredient(Base):
 
     confidence = Column(Float, default=0.0)
     resolved_by = Column(String, nullable=True)      # deterministic/knowledge_base/openfoodfacts/pubchem/gemini
+    provenance = Column(String, nullable=True)       # fuente auditable original (seed/llm_fallback/etc.)
     off_taxonomy_id = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)

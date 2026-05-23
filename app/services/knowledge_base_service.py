@@ -19,7 +19,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.ingredient import Ingredient, IngredientType
-from app.services.deterministic_classifier import IngredientResult
+from app.schemas.ingredient_result import IngredientResult
 from app.config.image_analysis_config import KB_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,9 @@ class KnowledgeBaseService:
             name=name_es,
             name_normalized=norm,
             category=ingredient.type.value if ingredient.type else "BASE",
+            origin=ingredient.origin,
+            function_tag=ingredient.function_tag,
+            description_es=ingredient.description_es,
             is_tacc_safe=ingredient.is_tacc_safe,
             is_lactose_safe=ingredient.is_lactose_safe,
             is_nut_safe=ingredient.is_nut_safe,
@@ -92,6 +95,9 @@ class KnowledgeBaseService:
                 name=original_name,
                 name_normalized=norm,
                 category=ingredient.type.value if ingredient.type else "BASE",
+                origin=ingredient.origin,
+                function_tag=ingredient.function_tag,
+                description_es=ingredient.description_es,
                 is_tacc_safe=ingredient.is_tacc_safe,
                 is_lactose_safe=ingredient.is_lactose_safe,
                 is_nut_safe=ingredient.is_nut_safe,
@@ -122,6 +128,7 @@ class KnowledgeBaseService:
         is_vegan_safe: Optional[bool],
         confidence: float,
         resolved_by: str,
+        provenance: Optional[str] = None,
         off_taxonomy_id: Optional[str] = None,
     ) -> Ingredient:
         """
@@ -152,6 +159,7 @@ class KnowledgeBaseService:
                 existing.is_vegan_safe = is_vegan_safe if is_vegan_safe is not None else existing.is_vegan_safe
                 existing.confidence = confidence
                 existing.resolved_by = resolved_by
+                existing.provenance = provenance or resolved_by
                 existing.off_taxonomy_id = off_taxonomy_id or existing.off_taxonomy_id
                 db.flush()
                 logger.debug(f"KB actualizada: '{norm}' (confianza {confidence:.2f})")
@@ -176,6 +184,7 @@ class KnowledgeBaseService:
                 is_vegan_safe=is_vegan_safe,
                 confidence=confidence,
                 resolved_by=resolved_by,
+                provenance=provenance or resolved_by,
                 off_taxonomy_id=off_taxonomy_id,
             )
             db.add(placeholder)
@@ -196,6 +205,7 @@ class KnowledgeBaseService:
             is_vegan_safe=is_vegan_safe,
             confidence=confidence,
             resolved_by=resolved_by,
+            provenance=provenance or resolved_by,
             off_taxonomy_id=off_taxonomy_id,
         )
         db.add(new_ing)

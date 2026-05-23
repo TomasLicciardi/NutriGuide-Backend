@@ -4,6 +4,14 @@ import os
 
 load_dotenv()
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 class Settings:
     PORT = os.getenv("PORT", "8000")
     DATABASE_PATH = os.getenv("DATABASE_PATH", "./data")
@@ -17,5 +25,6 @@ class Settings:
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
     MAIL_FROM = os.getenv("MAIL_FROM", "")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    LLM_FALLBACK_ENABLED = _env_bool("LLM_FALLBACK_ENABLED", True)
 
 settings = Settings()

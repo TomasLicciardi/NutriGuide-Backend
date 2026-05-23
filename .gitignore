@@ -1,2 +1,49 @@
+# ── Secrets y DB local ──
 .env
+.env.*
 nutriguide.db
+*.db-journal
+
+# ── Python bytecode y caches ──
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# ── Virtualenvs ──
+env/
+venv/
+.venv/
+ENV/
+
+# ── Pytest ──
+.pytest_cache/
+.pytest_tmp/
+.coverage
+htmlcov/
+coverage.xml
+
+# ── IDE / OS ──
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Distribución / build ──
+*.egg-info/
+build/
+dist/
+*.egg
+
+# ── Logs ──
+*.log
+logs/
+
+# ── Notebooks scratch ──
+.ipynb_checkpoints/
+
+# ── NOTA: data/off_taxonomy.sqlite SÍ se versiona (es cache OFF reproducible
+# por scripts/build_off_cache.py pero 6 MB y necesario para evaluation). ──

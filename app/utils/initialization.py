@@ -1,11 +1,11 @@
 # app/utils/initialization.py
 """
-Inicialización del sistema NutriGuide v2.1.
+Inicialización del sistema NutriGuide.
 
-Carga modelos locales al startup:
-  1. MarianMT (traducción ES→EN)
-  2. Sentence-Transformers (embedding classifier)
-  3. Verificación de Knowledge Base
+Carga al startup:
+  1. MarianMT (traducción ES→EN, local)
+  2. Loaders de referencia (Codex INS, OFF taxonomy, canonicalization)
+  3. Knowledge Base seed (ingredientes curados desde kb_seed.yaml)
 """
 
 import logging
@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 def initialize_system():
     """
     Inicializa el sistema:
-    1. Carga el modelo de traducción MarianMT
-    2. Carga el modelo de embeddings sentence-transformers
-    3. Verifica la Knowledge Base
+      1. Modelo de traducción MarianMT
+      2. Loaders de referencia (Codex INS, OFF taxonomy, canonicalization)
+      3. Seed de la Knowledge Base
     """
     try:
         logger.info("Iniciando inicialización del sistema...")
@@ -29,38 +29,30 @@ def initialize_system():
         test = translation_service.translate("agua")
         logger.info(f"Modelo de traducción OK (test: 'agua' → '{test}')")
 
-        # 2. Embedding Classifier (sentence-transformers)
-        logger.info("Cargando modelo de embeddings...")
+        # 2. Loaders de referencia
         try:
-            from app.services.embedding_classifier import embedding_classifier
-            embedding_classifier.initialize()
-            logger.info("Embedding classifier OK")
-        except ImportError as e:
-            logger.warning(
-                f"sentence-transformers no instalado: {e}. "
-                f"El Tier 3 (embedding) estará deshabilitado. "
-                f"Instalar con: pip install sentence-transformers"
+            from app.services.canonicalization_service import canonicalization_service
+            from app.services.loaders import codex_ins_loader, off_taxonomy_loader
+            canonical_count = canonicalization_service.initialize()
+            ins_count = codex_ins_loader.initialize()
+            off_count = off_taxonomy_loader.initialize()
+            logger.info(
+                f"Loaders: Canonicalization={canonical_count} reglas, "
+                f"Codex INS={ins_count} códigos, "
+                f"OFF taxonomy cache={off_count} entradas"
             )
         except Exception as e:
-            logger.warning(f"Error inicializando embedding classifier: {e}. Tier 3 deshabilitado.")
+            logger.warning(f"Algún loader falló: {e}. Pipeline funcionará con cobertura reducida.")
 
-        # 3. Knowledge Base
+        # 3. Knowledge Base — seed + verificación
         logger.info("Verificando Knowledge Base...")
         from app.database.connection import get_db
         from app.services.knowledge_base_service import knowledge_base_service
+        from app.data.seeder import seed_knowledge_base
         db = next(get_db())
+        seed_knowledge_base(db)
         count = knowledge_base_service.count(db)
         logger.info(f"Knowledge Base: {count} ingredientes registrados")
-
-        # Enriquecer embeddings con KB si está disponible
-        try:
-            from app.services.embedding_classifier import embedding_classifier
-            if embedding_classifier.is_initialized:
-                embedding_classifier.refresh_from_kb(db)
-                logger.info("Embedding classifier enriquecido con Knowledge Base")
-        except Exception:
-            pass
-
         db.close()
 
         logger.info("Inicialización del sistema completada")
@@ -77,6 +69,8 @@ def verify_system_health():
         from app.database.connection import get_db
         from app.services.knowledge_base_service import knowledge_base_service
         from app.services.translation_service import translation_service
+        from app.services.loaders import codex_ins_loader, off_taxonomy_loader
+        from app.services.canonicalization_service import canonicalization_service
 
         db = next(get_db())
         kb_count = knowledge_base_service.count(db)
@@ -84,28 +78,23 @@ def verify_system_health():
 
         translation_cache = translation_service.get_cache_size()
 
-        embedding_status = "disabled"
-        try:
-            from app.services.embedding_classifier import embedding_classifier
-            if embedding_classifier.is_initialized:
-                embedding_status = f"active ({len(embedding_classifier._reference_entries)} refs)"
-        except Exception:
-            pass
-
         health_status = {
             "knowledge_base_ingredients": kb_count,
             "translation_cache_size": translation_cache,
-            "embedding_classifier": embedding_status,
+            "codex_ins_loaded": codex_ins_loader.is_initialized,
+            "off_taxonomy_loaded": off_taxonomy_loader.is_initialized,
+            "canonicalization_loaded": canonicalization_service._initialized,
             "restrictions": ["sin_tacc", "sin_lactosa", "sin_frutos_secos", "vegano"],
-            "pipeline_tiers": [
-                "Tier 1: Deterministic (local rules)",
-                "Tier 2: Knowledge Base (local DB)",
-                "Tier 3: Embedding Classifier (local ML)",
-                "Tier 4: Open Food Facts (external API)",
-                "Tier 5: PubChem (external API)",
-                "Gemini: from OCR call (no extra API call)",
+            "pipeline_phases": [
+                "Fase 1: OCR + clasificación con Gemini Vision",
+                "Fase 2: Parser estructural argentino",
+                "Fase 3: Resolución por declaración legal",
+                "Fase 4: Enrichment paralelo (Codex INS + OFF + KB + Gemini)",
+                "Fase 4.5: LLM batch fallback (opcional)",
+                "Fase 5: Predicados declarativos por restricción",
+                "Fase 6: Veredicto + persistencia",
             ],
-            "gemini_calls_per_analysis": 1,
+            "gemini_calls_per_analysis": "1 (OCR) + opcional 1 (batch fallback)",
             "healthy": True,
         }
 
