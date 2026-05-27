@@ -145,18 +145,39 @@ _ALLERGEN_KEYWORDS = {
 _POSITIVE_PATTERNS = {
     "sin_tacc": [
         re.compile(r"\bsin\s+t\.?a\.?c\.?c\.?\b", re.IGNORECASE),
+        re.compile(r"\bsin\s+gluten\b", re.IGNORECASE),
         re.compile(r"\blibre\s+de\s+gluten\b", re.IGNORECASE),
         re.compile(r"\bgluten[\s-]*free\b", re.IGNORECASE),
+        re.compile(r"\bno\s+contiene\s+t\.?a\.?c\.?c\.?\b", re.IGNORECASE),
+        re.compile(r"\bno\s+contiene\s+gluten\b", re.IGNORECASE),
+        re.compile(r"\bapto\s+(?:para\s+)?cel[ií]acos?\b", re.IGNORECASE),
     ],
     "sin_lactosa": [
         re.compile(r"\bsin\s+lactosa\b", re.IGNORECASE),
         re.compile(r"\bdeslactosado\b", re.IGNORECASE),
         re.compile(r"\b0\s*%?\s*lactosa\b", re.IGNORECASE),
+        re.compile(r"\bno\s+contiene\s+lactosa\b", re.IGNORECASE),
+        re.compile(r"\blibre\s+de\s+lactosa\b", re.IGNORECASE),
+        re.compile(r"\blactose[\s-]*free\b", re.IGNORECASE),
+    ],
+    "sin_frutos_secos": [
+        re.compile(r"\bsin\s+frutos\s+secos\b", re.IGNORECASE),
+        re.compile(r"\blibre\s+de\s+frutos\s+secos\b", re.IGNORECASE),
+        re.compile(r"\bno\s+contiene\s+frutos\s+secos\b", re.IGNORECASE),
+        re.compile(r"\bsin\s+nueces\b", re.IGNORECASE),
+        re.compile(r"\bsin\s+man[ií]\b", re.IGNORECASE),
+        re.compile(r"\bno\s+contiene\s+man[ií]\b", re.IGNORECASE),
+        re.compile(r"\bnut[\s-]*free\b", re.IGNORECASE),
+        re.compile(r"\bpeanut[\s-]*free\b", re.IGNORECASE),
     ],
     "vegano": [
         re.compile(r"\bvegano\b", re.IGNORECASE),
-        re.compile(r"\bapto\s+vegano\b", re.IGNORECASE),
+        re.compile(r"\bvegana\b", re.IGNORECASE),
+        re.compile(r"\bapto\s+(?:para\s+)?veganos?\b", re.IGNORECASE),
         re.compile(r"\b100\s*%?\s*vegetal\b", re.IGNORECASE),
+        re.compile(r"\b100\s*%?\s*plant[\s-]*based\b", re.IGNORECASE),
+        re.compile(r"\bsin\s+ingredientes\s+(?:de\s+)?origen\s+animal\b", re.IGNORECASE),
+        re.compile(r"\bno\s+contiene\s+ingredientes\s+(?:de\s+)?origen\s+animal\b", re.IGNORECASE),
     ],
 }
 
@@ -257,28 +278,39 @@ def parse_allergen_declaration(text: str) -> ProductLegalDeclaration:
         return declaration
 
     text_norm = re.sub(r"\s+", " ", text.strip())
-    text_norm_no_acc = _strip_accents(text_norm)
 
-    contains_set: Set[str] = set()
-    for m in _RE_CONTAINS_BLOCK.finditer(text_norm):
-        block = m.group(1)
-        contains_set |= _extract_allergen_tokens(block)
-
-    may_contain_set: Set[str] = set()
-    for m in _RE_MAY_CONTAIN_BLOCK.finditer(text_norm):
-        block = m.group(1)
-        may_contain_set |= _extract_allergen_tokens(block)
-    for m in _RE_SHARED_LINE_BLOCK.finditer(text_norm_no_acc):
-        block = m.group(1)
-        may_contain_set |= _extract_allergen_tokens(block)
-
-    declaration.contains = _expand_to_implied_allergens(contains_set)
-    declaration.may_contain = _expand_to_implied_allergens(may_contain_set) - declaration.contains
-
+    # Detectar claims positivas PRIMERO sobre el texto original. Patterns como
+    # "NO CONTIENE TACC" o "LIBRE DE LACTOSA" se buscan acá; al hacerlo antes
+    # del blanqueo del paso siguiente preservamos sus matches.
     for restriction, patterns in _POSITIVE_PATTERNS.items():
         for pat in patterns:
             if pat.search(text_norm):
                 declaration.positive_claims.add(restriction)
                 break
+
+    # Neutralizar "NO CONTIENE X" antes de buscar bloques CONTIENE para evitar
+    # que el regex `_RE_CONTAINS_BLOCK` matchee la palabra "contiene" cuando
+    # está negada. Sin esto, "NO CONTIENE TACC" se interpretaría como "CONTIENE
+    # TACC" (falso positivo grave).
+    text_for_blocks = re.sub(
+        r"\bno\s+contiene\b", "exento de", text_norm, flags=re.IGNORECASE
+    )
+    text_for_blocks_no_acc = _strip_accents(text_for_blocks)
+
+    contains_set: Set[str] = set()
+    for m in _RE_CONTAINS_BLOCK.finditer(text_for_blocks):
+        block = m.group(1)
+        contains_set |= _extract_allergen_tokens(block)
+
+    may_contain_set: Set[str] = set()
+    for m in _RE_MAY_CONTAIN_BLOCK.finditer(text_for_blocks):
+        block = m.group(1)
+        may_contain_set |= _extract_allergen_tokens(block)
+    for m in _RE_SHARED_LINE_BLOCK.finditer(text_for_blocks_no_acc):
+        block = m.group(1)
+        may_contain_set |= _extract_allergen_tokens(block)
+
+    declaration.contains = _expand_to_implied_allergens(contains_set)
+    declaration.may_contain = _expand_to_implied_allergens(may_contain_set) - declaration.contains
 
     return declaration

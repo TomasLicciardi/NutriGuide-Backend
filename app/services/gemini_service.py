@@ -32,7 +32,9 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.0-flash-lite")
+# gemini-2.5-flash-lite: free tier vigente. La 2.0-flash-lite tiene limit:0
+# en el free tier según el proyecto (mismo motivo que llm_fallback_service).
+model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 
 # ── Rate limiter para el free tier de Gemini ──

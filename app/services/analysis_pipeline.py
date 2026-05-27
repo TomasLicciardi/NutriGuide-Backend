@@ -18,8 +18,9 @@ import asyncio
 import json
 import logging
 import time
+import unicodedata
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
@@ -61,6 +62,73 @@ _RESTRICTION_ALLERGEN_SETS = {
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Cross-check OCR ↔ ingredientes
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Mapeo alérgeno canónico → raíces que cuentan como evidencia en la lista de
+# ingredientes. Usado para detectar declaraciones legales no corroboradas
+# (caso típico: OCR alucina "CONTIENE GLUTEN" cuando ningún ingrediente lo
+# justifica). El match es por substring sobre texto sin acentos.
+#
+# Política: solo se aplica a `contains`. "PUEDE CONTENER" indica contaminación
+# cruzada por línea de producción compartida y NO requiere sustento en
+# ingredientes — un cross-check ahí daría falsos positivos sistemáticos.
+
+_ALLERGEN_INGREDIENT_KEYWORDS: Dict[str, Set[str]] = {
+    "gluten":    {"trigo", "wheat", "cebada", "barley", "centeno", "rye",
+                  "avena", "oat", "malta", "malt", "harina", "flour",
+                  "semola", "semolina", "espelta", "spelt", "kamut", "triticale"},
+    "wheat":     {"trigo", "wheat", "harina", "semola", "semolina"},
+    "barley":    {"cebada", "barley", "malta", "malt"},
+    "rye":       {"centeno", "rye"},
+    "oats":      {"avena", "oat", "oats"},
+    "milk":      {"leche", "milk", "lacteo", "lactico", "queso", "cheese",
+                  "suero", "whey", "caseina", "casein", "manteca",
+                  "mantequilla", "butter", "crema", "cream", "yogur",
+                  "yogurt", "kefir", "ricotta", "nata", "buttermilk"},
+    "lactose":   {"leche", "milk", "lactosa", "lactose", "suero", "queso",
+                  "lacteo"},
+    "dairy":     {"leche", "milk", "lacteo", "queso", "manteca", "crema",
+                  "cream", "yogur", "yogurt", "ricotta", "nata"},
+    "peanut":    {"mani", "peanut", "cacahuete", "cacahuate", "groundnut"},
+    "tree-nut":  {"almendra", "almond", "nuez", "walnut", "avellana",
+                  "hazelnut", "pistacho", "pistachio", "castana", "cashew",
+                  "anacardo", "macadamia", "pecan", "brasil", "brazil",
+                  "pinon", "pine nut"},
+    "soy":       {"soja", "soy", "soya", "edamame", "tofu", "tempeh"},
+    "egg":       {"huevo", "egg", "albumina", "albumin", "yema", "yolk",
+                  "ovoalbumina"},
+    "fish":      {"pescado", "fish", "atun", "tuna", "merluza", "hake",
+                  "salmon", "anchoa", "anchovy", "sardina", "sardine",
+                  "bacalao", "cod"},
+    "shellfish": {"marisco", "shellfish", "camaron", "shrimp", "langostino",
+                  "langostina", "cangrejo", "crab", "langosta", "lobster",
+                  "mejillon", "mussel", "almeja", "clam", "ostra", "oyster",
+                  "calamar", "squid"},
+    "sesame":    {"sesamo", "sesame", "ajonjoli", "tahini", "tahine"},
+    "sulfites":  {"sulfito", "sulfite", "metabisulfito", "metabisulfite",
+                  "bisulfito", "bisulfite", "anhidrido sulfuroso",
+                  "sulphur dioxide"},
+    "honey":     {"miel", "honey"},
+}
+
+
+def _strip_accents(text: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", text)
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+# Confianzas reducidas cuando una declaración no está corroborada por ningún
+# ingrediente de la lista. No descartamos la declaración (puede ser contaminación
+# cruzada legítima por línea compartida) pero bajamos la confianza del veredicto
+# y exponemos un warning auditable.
+_CONF_LEGAL_CONTAINS_SUPPORTED = 0.99
+_CONF_LEGAL_CONTAINS_UNSUPPORTED = 0.70
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Resultados estructurados
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -97,6 +165,7 @@ class PipelineResult:
     restrictions: Dict[str, RestrictionVerdict] = field(default_factory=dict)
     ingredient_facts: List[IngredientFacts] = field(default_factory=list)
     declaration: Optional[ProductLegalDeclaration] = None
+    declaration_warnings: List[str] = field(default_factory=list)
     ocr_result: Optional[OCRResult] = None
     overall_confidence: float = 0.0
     stats: PipelineStats = field(default_factory=PipelineStats)
@@ -193,11 +262,26 @@ class AnalysisPipeline:
         stats.total_ingredients = len(parsed_list)
         stats.total_flavorings = sum(1 for p in parsed_list if p.is_flavoring)
 
+        # ── FASE 2.5: Cross-check OCR ↔ ingredientes ──
+        # Detecta alérgenos declarados en CONTIENE que no tienen ningún
+        # ingrediente que los justifique (típica alucinación del OCR LLM).
+        unsupported_contains = self._cross_check_declaration(parsed_list, declaration)
+        declaration_warnings: List[str] = []
+        if unsupported_contains:
+            warning = (
+                f"Declaración CONTIENE sin sustento en ingredientes visibles: "
+                f"{sorted(unsupported_contains)}"
+            )
+            declaration_warnings.append(warning)
+            logger.warning(f"Cross-check: {warning}")
+
         # ── FASE 3: Resolución por declaración legal ──
         logger.info("FASE 3: Resolución por declaración legal")
         legal_verdicts: Dict[str, RestrictionVerdict] = {}
         for restriction in user_restrictions:
-            verdict = self._resolve_by_legal_declaration(restriction, declaration)
+            verdict = self._resolve_by_legal_declaration(
+                restriction, declaration, unsupported_contains
+            )
             if verdict is not None:
                 legal_verdicts[restriction] = verdict
                 stats.resolved_by_legal += 1
@@ -258,6 +342,7 @@ class AnalysisPipeline:
             restrictions=legal_verdicts,
             ingredient_facts=ingredient_facts,
             declaration=declaration,
+            declaration_warnings=declaration_warnings,
             ocr_result=None,
             overall_confidence=overall_confidence,
             stats=stats,
@@ -271,17 +356,24 @@ class AnalysisPipeline:
         self,
         restriction: str,
         declaration: ProductLegalDeclaration,
+        unsupported_contains: Set[str],
     ) -> Optional[RestrictionVerdict]:
         """
         Aplica la autoridad de la declaración legal sobre una restricción.
         Política: tanto CONTIENE como PUEDE CONTENER bloquean (conservador).
+
+        Si los alérgenos que disparan el match están en `unsupported_contains`
+        (declaración no corroborada por ningún ingrediente visible), la
+        confianza del veredicto se reduce y el motivo lo aclara. Sigue
+        bloqueando porque la declaración puede ser contaminación cruzada
+        legítima.
         """
         if declaration.declares_positive(restriction):
             return RestrictionVerdict(
                 apto=True,
                 motivo=f"Declaración positiva del fabricante: {restriction}",
                 fuente="legal_declaration",
-                confidence=0.99,
+                confidence=_CONF_LEGAL_CONTAINS_SUPPORTED,
             )
 
         allergen_set = _RESTRICTION_ALLERGEN_SETS.get(restriction)
@@ -289,12 +381,21 @@ class AnalysisPipeline:
             return None
 
         if declaration.declares_in_contains(allergen_set):
-            matched = declaration.matched_allergens(allergen_set)
+            matched = declaration.matched_allergens(allergen_set) & declaration.contains
+            all_unsupported = bool(matched) and matched.issubset(unsupported_contains)
+            confidence = (
+                _CONF_LEGAL_CONTAINS_UNSUPPORTED if all_unsupported
+                else _CONF_LEGAL_CONTAINS_SUPPORTED
+            )
+            note = (
+                " (declaración no corroborada por ingredientes visibles)"
+                if all_unsupported else ""
+            )
             return RestrictionVerdict(
                 apto=False,
-                motivo=f"Declaración legal CONTIENE: {', '.join(sorted(matched))}",
+                motivo=f"Declaración legal CONTIENE: {', '.join(sorted(matched))}{note}",
                 fuente="legal_declaration",
-                confidence=0.99,
+                confidence=confidence,
             )
         if declaration.declares_any(allergen_set):
             matched = declaration.matched_allergens(allergen_set)
@@ -305,6 +406,40 @@ class AnalysisPipeline:
                 confidence=0.95,
             )
         return None
+
+    @staticmethod
+    def _cross_check_declaration(
+        parsed_list: List[ParsedIngredient],
+        declaration: ProductLegalDeclaration,
+    ) -> Set[str]:
+        """
+        Verifica si cada alérgeno declarado en CONTIENE tiene al menos un
+        ingrediente que lo justifique. Retorna el set de alérgenos NO
+        corroborados.
+
+        Solo aplica a `contains` — los "PUEDE CONTENER" indican contaminación
+        cruzada y no es esperable que el alérgeno aparezca en la lista.
+        """
+        if not declaration.contains:
+            return set()
+
+        ingredient_text = _strip_accents(
+            " ".join(p.name or "" for p in parsed_list).lower()
+        )
+
+        unsupported: Set[str] = set()
+        for allergen in declaration.contains:
+            keywords = _ALLERGEN_INGREDIENT_KEYWORDS.get(allergen)
+            if not keywords:
+                # Alérgeno sin keywords definidas — no podemos verificar,
+                # asumimos corroborado (no penalizamos).
+                continue
+            supported = any(
+                _strip_accents(kw.lower()) in ingredient_text for kw in keywords
+            )
+            if not supported:
+                unsupported.add(allergen)
+        return unsupported
 
     def _evaluate_predicate_for_product(
         self,
@@ -349,7 +484,7 @@ class AnalysisPipeline:
                 stats.resolved_by_gemini += 1
             elif "llm_fallback" in f.sources:
                 stats.resolved_by_llm += 1
-            elif "policy_caa" in f.sources:
+            elif "policy_caa" in f.sources or "contextual_override" in f.sources:
                 stats.resolved_by_policy += 1
             else:
                 stats.unresolved += 1

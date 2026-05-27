@@ -105,6 +105,7 @@ async def analizar_producto(
             may_contain=sorted(result.declaration.may_contain) if result.declaration else [],
             positive_claims=sorted(result.declaration.positive_claims) if result.declaration else [],
             raw_text=result.declaration.raw_text if result.declaration else None,
+            warnings=result.declaration_warnings,
         ),
         overall_confidence=result.overall_confidence,
         stats=StatsResponse(

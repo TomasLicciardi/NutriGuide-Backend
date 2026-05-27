@@ -40,6 +40,7 @@ from app.services.ingredient_facts import (
     TagProvenance,
 )
 from app.services.canonicalization_service import canonicalization_service
+from app.services.contextual_overrides import apply_override, resolve_ambiguous_term
 from app.services.parser import ParsedIngredient
 from app.services.loaders import codex_ins_loader, off_taxonomy_loader
 
@@ -51,16 +52,17 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════════
 
 _CONFIDENCE_BY_SOURCE = {
-    "codex_ins":         0.94,
-    "off_taxonomy":      0.85,
-    "kb_cache":          0.93,
-    "pubchem":           0.75,
-    "gemini":            0.65,
-    "llm_fallback":      0.70,
-    "policy_caa":        0.92,
-    "parser":            0.80,
-    "zero_shot":         0.70,
-    "legal_declaration": 0.99,
+    "codex_ins":           0.94,
+    "off_taxonomy":        0.85,
+    "kb_cache":            0.93,
+    "pubchem":             0.75,
+    "gemini":              0.65,
+    "llm_fallback":        0.70,
+    "policy_caa":          0.92,
+    "parser":              0.80,
+    "zero_shot":           0.70,
+    "legal_declaration":   0.99,
+    "contextual_override": 0.92,
 }
 
 
@@ -184,6 +186,18 @@ class EnrichmentService:
 
         if parsed.is_ley_25630_block:
             self._apply_ley_25630_policy(facts)
+
+        # Override contextual para términos ambiguos (ej: "burro" en yerba
+        # mate). Se aplica ANTES de KB/Codex/OFF: si dispara, es autoritativo
+        # y se salta el lookup externo que mete el falso positivo.
+        override = resolve_ambiguous_term(parsed.name, context)
+        if override is not None:
+            apply_override(facts, override)
+            logger.info(
+                f"Contextual override: '{parsed.name}' -> "
+                f"{override.canonical_name_es} (matched: {override.matched_context_terms})"
+            )
+            return facts
 
         if parsed.function_tag:
             facts.function_tag = parsed.function_tag

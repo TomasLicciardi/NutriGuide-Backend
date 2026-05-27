@@ -2020,3 +2020,778 @@
   is_lactose_safe: true
   is_nut_safe: true
   is_vegan_safe: true
+
+# ══════════════════════════════════════════════════════════════════════
+# A. Yerba mate compuesta + infusiones argentinas
+# ══════════════════════════════════════════════════════════════════════
+# Hierbas comunes en yerbas mate compuestas (Cruz de Malta, Taragüi, etc.)
+# y en infusiones tradicionales. Todas planta y safe en las 4 restricciones.
+
+- name_es: yerba mate
+  name_en: yerba mate
+  type: BASE
+  origin: vegetal
+  description_es: Ilex paraguariensis, hoja secada y molida usada en infusion
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: yerba mate elaborada
+  name_en: processed yerba mate
+  type: BASE
+  origin: vegetal
+  description_es: Yerba mate con palo y polvo, lista para consumir
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: palo
+  name_en: yerba mate stem
+  type: BASE
+  origin: vegetal
+  description_es: Fragmentos de tallo seco de yerba mate (Ilex paraguariensis)
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: poleo
+  name_en: pennyroyal
+  type: BASE
+  origin: vegetal
+  description_es: Mentha pulegium, hierba aromatica usada en infusiones
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: menta
+  name_en: mint
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: menta piperita
+  name_en: peppermint
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: cedron
+  name_en: lemon verbena
+  type: BASE
+  origin: vegetal
+  description_es: Aloysia citrodora, hierba aromatica citrica
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: peperina
+  name_en: peperina
+  type: BASE
+  origin: vegetal
+  description_es: Minthostachys verticillata, hierba aromatica andina
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: marcela
+  name_en: marcela
+  type: BASE
+  origin: vegetal
+  description_es: Achyrocline satureioides, hierba medicinal sudamericana
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: boldo
+  name_en: boldo
+  type: BASE
+  origin: vegetal
+  description_es: Peumus boldus, hierba chilena usada en infusiones digestivas
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: tilo
+  name_en: linden
+  type: BASE
+  origin: vegetal
+  description_es: Flores de Tilia spp., infusion relajante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: manzanilla
+  name_en: chamomile
+  type: BASE
+  origin: vegetal
+  description_es: Matricaria chamomilla, hierba para infusion
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: te
+  name_en: tea
+  type: BASE
+  origin: vegetal
+  description_es: Camellia sinensis, hojas para infusion
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: te verde
+  name_en: green tea
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: te rojo
+  name_en: red tea
+  type: BASE
+  origin: vegetal
+  description_es: Te rooibos o pu-erh segun contexto
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: te blanco
+  name_en: white tea
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: hierba
+  name_en: herb
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: hierbas
+  name_en: herbs
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: yuyo
+  name_en: herb
+  type: BASE
+  origin: vegetal
+  description_es: Nombre coloquial AR para hierbas medicinales
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: yuyos
+  name_en: herbs
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: moringa
+  name_en: moringa
+  type: BASE
+  origin: vegetal
+  description_es: Moringa oleifera, planta nutritiva
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ══════════════════════════════════════════════════════════════════════
+# B. Frutas adicionales (mermeladas, bebidas, frutos del bosque)
+# ══════════════════════════════════════════════════════════════════════
+
+- name_es: mora
+  name_en: blackberry
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: moras
+  name_en: blackberries
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: arandano
+  name_en: blueberry
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: arandanos
+  name_en: blueberries
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: cassis
+  name_en: blackcurrant
+  type: BASE
+  origin: vegetal
+  description_es: Grosella negra (Ribes nigrum)
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: grosella
+  name_en: currant
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: frambuesa
+  name_en: raspberry
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: frambuesas
+  name_en: raspberries
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: damasco
+  name_en: apricot
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: damascos
+  name_en: apricots
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: ciruela
+  name_en: plum
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pera
+  name_en: pear
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: peras
+  name_en: pears
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: anana
+  name_en: pineapple
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pina
+  name_en: pineapple
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: mango
+  name_en: mango
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ══════════════════════════════════════════════════════════════════════
+# C. Coco y derivados
+# ══════════════════════════════════════════════════════════════════════
+# El coco no es un fruto seco botánicamente (es una drupa); is_nut_safe=true.
+
+- name_es: coco
+  name_en: coconut
+  type: BASE
+  origin: vegetal
+  description_es: Cocos nucifera, drupa (no es fruto seco)
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: aceite de coco
+  name_en: coconut oil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: coco rallado
+  name_en: shredded coconut
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: agua de coco
+  name_en: coconut water
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: extracto de coco
+  name_en: coconut extract
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pulpa de coco
+  name_en: coconut pulp
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: harina de coco
+  name_en: coconut flour
+  type: BASE
+  origin: vegetal
+  description_es: Harina del coco, libre de gluten (no es harina de trigo)
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ══════════════════════════════════════════════════════════════════════
+# D. Edulcorantes naturales y poliloles
+# ══════════════════════════════════════════════════════════════════════
+
+- name_es: stevia
+  name_en: stevia
+  type: ADITIVO
+  origin: vegetal
+  function_tag: edulcorante
+  description_es: Stevia rebaudiana, edulcorante de origen vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: glucosido de esteviol
+  name_en: steviol glycoside
+  type: ADITIVO
+  origin: vegetal
+  function_tag: edulcorante
+  description_es: Compuesto activo de la stevia
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: eritritol
+  name_en: erythritol
+  type: ADITIVO
+  origin: sintetico
+  function_tag: edulcorante
+  description_es: Poliol producido por fermentacion
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: xilitol
+  name_en: xylitol
+  type: ADITIVO
+  origin: vegetal
+  function_tag: edulcorante
+  description_es: Poliol extraido de la madera de abedul
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: maltitol
+  name_en: maltitol
+  type: ADITIVO
+  origin: vegetal
+  function_tag: edulcorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: isomalta
+  name_en: isomalt
+  type: ADITIVO
+  origin: sintetico
+  function_tag: edulcorante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: lactitol
+  name_en: lactitol
+  type: ADITIVO
+  origin: animal
+  function_tag: edulcorante
+  description_es: Poliol derivado de la lactosa (de leche) - NO es libre de lactosa
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+# ══════════════════════════════════════════════════════════════════════
+# E. Hierbas aromáticas adicionales
+# ══════════════════════════════════════════════════════════════════════
+
+- name_es: albahaca
+  name_en: basil
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: tomillo
+  name_en: thyme
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: romero
+  name_en: rosemary
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: perejil
+  name_en: parsley
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: estragon
+  name_en: tarragon
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: eneldo
+  name_en: dill
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: salvia
+  name_en: sage
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: ciboulette
+  name_en: chives
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ══════════════════════════════════════════════════════════════════════
+# F. Concentrados, jugos y extractos comunes (productos industriales)
+# ══════════════════════════════════════════════════════════════════════
+
+- name_es: concentrado de pera
+  name_en: pear concentrate
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: concentrado de manzana
+  name_en: apple concentrate
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: extracto de tomate
+  name_en: tomato extract
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pulpa de tomate
+  name_en: tomato pulp
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: jugo concentrado de manzana
+  name_en: concentrated apple juice
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: jugo de uva
+  name_en: grape juice
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ══════════════════════════════════════════════════════════════════════
+# G. Lácteos adicionales (para detectar derivados ocultos)
+# ══════════════════════════════════════════════════════════════════════
+# Todos animal, bloquean lactosa y vegano. TACC y nuez siguen safe salvo
+# casos específicos (queso azul tiene cultivos, no afecta).
+
+- name_es: yogur
+  name_en: yogurt
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: yogurt
+  name_en: yogurt
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: kefir
+  name_en: kefir
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: queso crema
+  name_en: cream cheese
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: queso untable
+  name_en: spreadable cheese
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: mozzarella
+  name_en: mozzarella
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: parmesano
+  name_en: parmesan
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: queso rallado
+  name_en: grated cheese
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+# ══════════════════════════════════════════════════════════════════════
+# H. Variantes y aditivos puntuales surgidos del testing
+# ══════════════════════════════════════════════════════════════════════
+
+- name_es: pectina citrica
+  name_en: citrus pectin
+  type: ADITIVO
+  origin: vegetal
+  function_tag: espesante
+  description_es: Pectina extraida de citricos (membrana blanca)
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: sulfitos
+  name_en: sulfites
+  type: ADITIVO
+  origin: sintetico
+  function_tag: conservante
+  description_es: Conservantes E220-E228 (sulfitos, metabisulfitos)
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: sulfito
+  name_en: sulfite
+  type: ADITIVO
+  origin: sintetico
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: metabisulfito
+  name_en: metabisulfite
+  type: ADITIVO
+  origin: sintetico
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: metabisulfitos
+  name_en: metabisulfites
+  type: ADITIVO
+  origin: sintetico
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true

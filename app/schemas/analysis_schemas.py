@@ -44,6 +44,10 @@ class LegalDeclarationResponse(BaseModel):
     may_contain: List[str] = Field(default_factory=list)
     positive_claims: List[str] = Field(default_factory=list)
     raw_text: Optional[str] = None
+    warnings: List[str] = Field(
+        default_factory=list,
+        description="Alertas del cross-check OCR ↔ ingredientes (declaraciones no corroboradas)",
+    )
 
 
 class StatsResponse(BaseModel):
