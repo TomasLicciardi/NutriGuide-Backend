@@ -28,94 +28,12 @@ COMPRESSION_CONFIG = {
     }
 }
 
-VALIDATION_CONFIG = {
-    "confidence_threshold": 0.70,
-    "minimum_confidence_for_critical": 0.90,
-    "max_retries": 3,
-    "retry_delay": 1.0,
-    "critical_restrictions": ["sin_tacc", "sin_frutos_secos"],
-}
-
-SUPPORTED_RESTRICTIONS = {
-    "sin_tacc": {
-        "name": "Sin TACC",
-        "description": "Sin trigo, avena, cebada y centeno",
-        "critical": True,
-        "confidence_required": 0.90,
-    },
-    "sin_lactosa": {
-        "name": "Sin Lactosa",
-        "description": "Sin productos lácteos que contengan lactosa",
-        "critical": True,
-        "confidence_required": 0.85,
-    },
-    "sin_frutos_secos": {
-        "name": "Sin Frutos Secos",
-        "description": "Sin frutos secos ni maní",
-        "critical": True,
-        "confidence_required": 0.90,
-    },
-    "vegano": {
-        "name": "Vegano",
-        "description": "Sin productos de origen animal",
-        "critical": False,
-        "confidence_required": 0.70,
-    },
-}
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Pesos de confianza por fuente — FUENTE ÚNICA DE VERDAD
-#
-# Justificación de pesos:
-#   allergen_text        0.98 — Declaración legal del fabricante (ANMAT)
-#   deterministic        0.97 — Guardrail de alérgenos (keywords factuales)
-#   ins_parser           0.94 — Codex Alimentarius (parsing estructural)
-#   knowledge_base       0.93 — Ingredientes previamente verificados
-#   gemini_function_rule 0.90 — Regla funcional (saborizante/aromatizante → safe)
-#   embedding            0.88 — Similitud semántica con modelo local
-#   openfoodfacts        0.85 — Base de datos comunitaria con taxonomía global
-#   pubchem              0.75 — Identificación química, clasificación inferida
-#   gemini               0.65 — LLM puede alucinar, se usa como último recurso
-# ═══════════════════════════════════════════════════════════════════════════════
-TIER_WEIGHTS = {
-    "allergen_text": 0.98,
-    "deterministic": 0.97,
-    "ins_parser": 0.94,
-    "knowledge_base": 0.93,
-    "gemini_function_rule": 0.90,
-    "embedding": 0.88,
-    "openfoodfacts": 0.85,
-    "pubchem": 0.75,
-    "gemini": 0.65,
-}
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Knowledge Base — Control de calidad
 # ═══════════════════════════════════════════════════════════════════════════════
 KB_CONFIG = {
     "min_write_confidence": 0.75,
     "min_confidence_for_override": 0.85,
-}
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Embedding Classifier
-# ═══════════════════════════════════════════════════════════════════════════════
-EMBEDDING_CONFIG = {
-    "model_name": "paraphrase-multilingual-MiniLM-L12-v2",
-    "similarity_threshold": 0.82,
-    "max_candidates": 3,
-}
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Pipeline
-# ═══════════════════════════════════════════════════════════════════════════════
-PIPELINE_CONFIG = {
-    "max_analysis_time": 45.0,
-    "tier_external_timeout": 15.0,
-    "translation_batch_size": 50,
-    "pubchem_max_concurrent": 4,
-    "off_rate_limit_per_min": 100,
-    "default_unsafe_for_medical": True,
 }
 
 ERROR_MESSAGES = {

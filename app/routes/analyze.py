@@ -23,6 +23,7 @@ from app.schemas.analysis_schemas import (
     LegalDeclarationResponse,
     RestrictionResponse,
     StatsResponse,
+    TriggerIngredientResponse,
 )
 from app.resources.user import get_user_by_id
 from app.resources.history import get_history_by_user_id, create_history_for_user
@@ -96,6 +97,14 @@ async def analizar_producto(
                 fuente=v.fuente,
                 confidence=v.confidence,
                 ingrediente_disparador=v.ingrediente_disparador,
+                trigger_ingredients=[
+                    TriggerIngredientResponse(
+                        name=t.name,
+                        explanation=t.explanation,
+                        allergen=t.allergen,
+                    )
+                    for t in v.trigger_ingredients
+                ],
             )
             for r, v in result.restrictions.items()
         },
@@ -115,6 +124,7 @@ async def analizar_producto(
             resolved_by_codex=result.stats.resolved_by_codex,
             resolved_by_off=result.stats.resolved_by_off,
             resolved_by_kb=result.stats.resolved_by_kb,
+            resolved_by_pubchem=result.stats.resolved_by_pubchem,
             resolved_by_gemini=result.stats.resolved_by_gemini,
             resolved_by_llm=result.stats.resolved_by_llm,
             resolved_by_policy=result.stats.resolved_by_policy,

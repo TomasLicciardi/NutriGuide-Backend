@@ -1,5 +1,5 @@
 # app/models/user.py
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, Text, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database.connection import Base
@@ -11,10 +11,11 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, nullable=False)
-    email = Column(String, unique=True, nullable=False)  
+    email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
     restrictions = Column(Text, default="[]")
     reset_token = Column(String, nullable=True)          # token temporal para recuperar contraseña
+    is_admin = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # uselist=False correcto: History es un contenedor único por usuario (unique=True en user_id)

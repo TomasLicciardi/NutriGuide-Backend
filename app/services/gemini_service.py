@@ -25,23 +25,24 @@ import google.generativeai as genai
 from PIL import Image
 
 from app.utils.image_tools import comprimir_imagen_inteligente, analizar_calidad_imagen
-from app.config.image_analysis_config import VALIDATION_CONFIG, ERROR_MESSAGES
+from app.core.config import settings
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-# gemini-2.5-flash-lite: free tier vigente. La 2.0-flash-lite tiene limit:0
-# en el free tier según el proyecto (mismo motivo que llm_fallback_service).
-model = genai.GenerativeModel("gemini-2.5-flash-lite")
+# Modelo de la Fase 1 (OCR + clasificación). Configurable vía settings:
+# GEMINI_VISION_MODEL en .env. Default: gemini-2.5-flash-lite (free tier vigente).
+model = genai.GenerativeModel(settings.GEMINI_VISION_MODEL)
+logger.info(f"Gemini Vision: usando modelo '{settings.GEMINI_VISION_MODEL}'")
 
 
 # ── Rate limiter para el free tier de Gemini ──
 # Free tier de gemini-2.0-flash: 15 RPM. Mantenemos margen y permitimos 12 RPM
 # para no rozar el límite con clock skew. El limiter es global porque la cuota
 # se aplica por API key, no por request.
-_RPM_LIMIT = 12
+_RPM_LIMIT = int(os.getenv("GEMINI_RPM_LIMIT", "12"))
 _RATE_WINDOW_S = 60.0
 _call_timestamps: deque = deque(maxlen=_RPM_LIMIT)
 _rate_lock = asyncio.Lock()
@@ -51,6 +52,43 @@ def _extract_retry_delay(msg: str) -> Optional[int]:
     """Parsea el `retry_delay { seconds: N }` del mensaje 429 de Gemini."""
     m = re.search(r"retry_delay\s*\{\s*seconds:\s*(\d+)", msg)
     return int(m.group(1)) if m else None
+
+
+def _classify_429(msg: str) -> str:
+    """
+    Identifica el tipo de cuota agotada de un mensaje 429 de Gemini.
+
+    Returns:
+        "daily"     — RPD por proyecto/modelo agotada. No sirve reintentar.
+        "rpm"       — Per-minute rate limit. Esperar retry_delay y reintentar.
+        "tokens"    — Tokens por minuto agotados. Esperar y reintentar.
+        "unknown"   — No matcheó ningún patrón conocido.
+    """
+    # Orden: chequear el patrón MÁS específico primero. "PerMinute" es
+    # subcadena de "InputTokensPerModelPerMinute", así que tokens va antes.
+    if "InputTokensPerModelPerMinute" in msg or "InputTokensPerModel" in msg:
+        return "tokens"
+    if "PerDay" in msg:
+        return "daily"
+    if "PerMinute" in msg:
+        return "rpm"
+    return "unknown"
+
+
+def _is_429(exc: Exception) -> bool:
+    msg = str(exc)
+    return "429" in msg or "ResourceExhausted" in type(exc).__name__
+
+
+class QuotaExhaustedError(Exception):
+    """Raised cuando la cuota diaria del modelo está agotada (no sirve reintentar)."""
+    def __init__(self, model_name: str, original_msg: str = ""):
+        self.model_name = model_name
+        self.original_msg = original_msg
+        super().__init__(
+            f"Cuota diaria agotada para '{model_name}'. "
+            f"Reintentar no ayuda hasta el reset (~24h) o activar billing."
+        )
 
 
 async def _rate_limit_acquire() -> None:
@@ -179,7 +217,7 @@ class GeminiService:
             prompt = self._get_unified_prompt()
             response = await self._call_gemini_with_retry(
                 content=[prompt, {"mime_type": "image/jpeg", "data": imagen_bytes}],
-                timeouts=[15, 25],
+                timeouts=[25, 45],
             )
 
             if response is None:
@@ -197,6 +235,16 @@ class GeminiService:
                 f"{len(result.classifications)} clasificados"
             )
             return result
+
+        except QuotaExhaustedError as e:
+            # Cuota diaria agotada: error específico para que el caller
+            # (script de batch, endpoint) pueda decidir abortar el lote
+            # completo en lugar de seguir intentando con cada foto.
+            return OCRResult(
+                success=False,
+                error="quota_exhausted_daily",
+                message=str(e),
+            )
 
         except Exception as e:
             logger.error(f"Error general en OCR+Clasificación: {type(e).__name__}: {e}")
@@ -360,18 +408,82 @@ RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
         return data
 
     async def _call_gemini_with_retry(self, content, timeouts: List[int]):
-        for attempt, timeout in enumerate(timeouts):
+        """
+        Llama a Gemini Vision con retries adaptados al tipo de error.
+
+        Política de 429:
+          - "daily" (RPD agotado): aborta inmediato. Reintentar no sirve hasta
+            el reset (~24h). Lanza QuotaExhaustedError para que el caller pueda
+            cortar el batch completo y no perder tiempo con timeouts inútiles.
+          - "rpm" / "tokens": respeta el `retry_delay` que devuelve la API y
+            reintenta. Si no hay retry_delay parseable, usa backoff exponencial
+            (5s, 10s, 20s).
+          - Otros errores: reintenta con el siguiente timeout de la lista.
+
+        Para errores transitorios (timeout, errores de red), reintenta con el
+        siguiente timeout más largo de la lista `timeouts`.
+        """
+        backoff_429 = [5, 10, 20]  # fallback si no hay retry_delay en el msg
+        attempt_429 = 0
+        attempt_general = 0
+
+        while attempt_general < len(timeouts):
+            timeout = timeouts[attempt_general]
             try:
-                logger.info(f"Gemini intento {attempt + 1}/{len(timeouts)}, timeout={timeout}s")
+                logger.info(
+                    f"Gemini intento {attempt_general + 1}/{len(timeouts)}, "
+                    f"timeout={timeout}s (modelo: {settings.GEMINI_VISION_MODEL})"
+                )
                 response = await asyncio.wait_for(
                     asyncio.to_thread(model.generate_content, content),
                     timeout=timeout,
                 )
                 return response
+
             except asyncio.TimeoutError:
-                logger.error(f"Timeout Gemini intento {attempt + 1}")
+                logger.error(f"Timeout Gemini intento {attempt_general + 1}")
+                attempt_general += 1
+
             except Exception as e:
-                logger.error(f"Error Gemini intento {attempt + 1}: {type(e).__name__}: {e}")
+                if not _is_429(e):
+                    logger.error(
+                        f"Error Gemini intento {attempt_general + 1}: "
+                        f"{type(e).__name__}: {e}"
+                    )
+                    attempt_general += 1
+                    continue
+
+                # ── Es 429: clasificar y decidir ──
+                msg = str(e)
+                kind = _classify_429(msg)
+                if kind == "daily":
+                    logger.error(
+                        f"Gemini 429 RPD agotado para '{settings.GEMINI_VISION_MODEL}'. "
+                        f"Abortando — no sirve reintentar hasta el reset."
+                    )
+                    raise QuotaExhaustedError(settings.GEMINI_VISION_MODEL, msg)
+
+                # RPM o tokens: esperar y reintentar
+                if attempt_429 >= len(backoff_429):
+                    logger.error(
+                        f"Gemini 429 ({kind}): agotados los reintentos "
+                        f"({len(backoff_429)}). Abortando esta llamada."
+                    )
+                    attempt_general += 1
+                    continue
+
+                delay = _extract_retry_delay(msg) or backoff_429[attempt_429]
+                # Margen sobre el delay sugerido por la API
+                delay = delay + 1
+                logger.warning(
+                    f"Gemini 429 ({kind}), esperando {delay}s antes de reintentar "
+                    f"(intento 429 #{attempt_429 + 1}/{len(backoff_429)})"
+                )
+                await asyncio.sleep(delay)
+                attempt_429 += 1
+                # NO incrementamos attempt_general: el 429 no consume un slot
+                # de los timeouts generales.
+
         return None
 
 

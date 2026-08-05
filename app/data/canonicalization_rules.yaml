@@ -111,6 +111,30 @@ aliases:
     canonical: grasa bovina
     name_en: beef fat
     reason: grasa de origen bovino
+  aceites vegetales:
+    canonical: aceite vegetal
+    name_en: vegetable oil
+    reason: plural sin cambio de identidad
+  amarillo ocaso:
+    canonical: amarillo ocaso fcf
+    name_en: sunset yellow fcf
+    reason: nombre corto del colorante INS 110
+  azul brillante:
+    canonical: azul brillante fcf
+    name_en: brilliant blue fcf
+    reason: nombre corto del colorante INS 133
+  rojo allura:
+    canonical: rojo allura ac
+    name_en: allura red ac
+    reason: nombre corto del colorante INS 129
+  amarillo crepusculo:
+    canonical: amarillo ocaso fcf
+    name_en: sunset yellow fcf
+    reason: sinonimo regional del colorante INS 110
+  grasas vegetales:
+    canonical: grasa vegetal
+    name_en: vegetable fat
+    reason: plural sin cambio de identidad
 
   # ─── Sinónimos regionales AR↔ES (uso ibérico en OFF taxonomy) ───
   # OFF a veces tiene el ingrediente solo bajo el nombre ibérico; agregamos
@@ -185,6 +209,14 @@ aliases:
     reason: banana (AR) = plátano (ES)
 
 patterns:
+  # IMPORTANTE: no matchea "leche de coco/almendras/soja" porque los
+  # calificadores estan en lista cerrada (no incluye "de <planta>").
+  - id: milk_variants
+    pattern: "^leche(?:\\s+(?:entera|descremada|desnatada|semidescremada|parcialmente\\s+descremada|en\\s+polvo|pasteurizad[oa]s?|uht|larga\\s+vida|fluida))+$"
+    canonical: leche
+    name_en: milk
+    reason: variedad/forma fisica de leche sin cambio de alergenos
+
   - id: enriched_wheat_flour_argentina
     pattern: "^harina(?:\\s+de)?\\s+trigo(?:\\s+(?:tipo\\s*)?0{3,4})?\\s+enriquecida(?:\\s+(?:segun\\s+)?ley\\s*25[\\.]?630)?$"
     canonical: harina enriquecida

@@ -8,12 +8,19 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class TriggerIngredientResponse(BaseModel):
+    name: str
+    explanation: str
+    allergen: str
+
+
 class RestrictionResponse(BaseModel):
     apto: bool
     motivo: Optional[str] = None
     fuente: str = Field(..., description="legal_declaration | ingredient_analysis | flavoring_policy")
     confidence: float
     ingrediente_disparador: Optional[str] = None
+    trigger_ingredients: List[TriggerIngredientResponse] = Field(default_factory=list)
 
 
 class IngredientResponse(BaseModel):
@@ -57,6 +64,7 @@ class StatsResponse(BaseModel):
     resolved_by_codex: int
     resolved_by_off: int
     resolved_by_kb: int
+    resolved_by_pubchem: int = 0
     resolved_by_gemini: int
     resolved_by_llm: int = 0
     resolved_by_policy: int = 0

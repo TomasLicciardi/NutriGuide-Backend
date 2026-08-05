@@ -77,9 +77,60 @@ _AMBIGUOUS_TERMS: Dict[str, List[dict]] = {
 }
 
 
+# Correcciones INCONDICIONALES: ingredientes cuyo nombre induce a una
+# clasificación errónea sin importar el contexto. A diferencia de los términos
+# ambiguos de arriba, estos siempre tienen el mismo sentido.
+#
+# Caso canónico: "nuez moscada" contiene "nuez" pero es una especia (semilla de
+# Myristica fragrans), NO un fruto seco de árbol — segura para alérgicos a
+# frutos secos. Fuentes como Gemini la marcan como nut por el nombre.
+# El match es por substring normalizado para cubrir "nuez moscada molida/en polvo".
+_KNOWN_OVERRIDES: Dict[str, dict] = {
+    "nuez moscada": {
+        "canonical_name_es": "nuez moscada",
+        "category": IngredientCategory.BASE,
+        "origin": Origin.PLANT,
+        "description_es": (
+            "Especia obtenida de la semilla de Myristica fragrans. Pese a su "
+            "nombre, NO es un fruto seco de árbol; es segura para personas con "
+            "alergia a frutos secos."
+        ),
+        "confidence": 0.95,
+        "reason": (
+            "'nuez moscada' contiene 'nuez' pero es una especia (semilla), "
+            "no un fruto seco de árbol."
+        ),
+    },
+}
+
+
 def _normalize(text: str) -> str:
     nfkd = unicodedata.normalize("NFD", (text or "").lower())
     return "".join(c for c in nfkd if unicodedata.category(c) != "Mn").strip()
+
+
+def resolve_known_ingredient(name_es: str) -> Optional[ContextualOverride]:
+    """
+    Corrección incondicional para ingredientes cuyo nombre induce a una
+    clasificación errónea (homónimos), independientemente del contexto.
+    Retorna el override si el nombre coincide por substring normalizado, o None.
+    """
+    if not name_es:
+        return None
+    norm = _normalize(name_es)
+    for key, data in _KNOWN_OVERRIDES.items():
+        if key in norm:
+            return ContextualOverride(
+                canonical_name_es=data["canonical_name_es"],
+                category=data["category"],
+                origin=data["origin"],
+                description_es=data["description_es"],
+                confidence=data["confidence"],
+                matched_term=key,
+                matched_context_terms=[],
+                reason=data["reason"],
+            )
+    return None
 
 
 def resolve_ambiguous_term(

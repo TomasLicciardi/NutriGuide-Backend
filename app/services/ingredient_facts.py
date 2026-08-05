@@ -108,6 +108,43 @@ ANIMAL_SOURCES: frozenset = frozenset({
 })
 
 
+# Etiqueta en español para cada alérgeno canónico — usada al construir motivos
+# visibles al usuario. Si falta una entrada, se devuelve el token original.
+ALLERGEN_ES_LABELS = {
+    ALLERGEN_GLUTEN: "gluten",
+    ALLERGEN_WHEAT: "trigo",
+    ALLERGEN_BARLEY: "cebada",
+    ALLERGEN_RYE: "centeno",
+    ALLERGEN_OATS: "avena",
+    ALLERGEN_MILK: "leche",
+    ALLERGEN_LACTOSE: "lactosa",
+    ALLERGEN_DAIRY: "lácteos",
+    ALLERGEN_TREE_NUT: "frutos secos",
+    ALLERGEN_PEANUT: "maní",
+    ALLERGEN_SOY: "soja",
+    ALLERGEN_EGG: "huevo",
+    ALLERGEN_FISH: "pescado",
+    ALLERGEN_SHELLFISH: "mariscos",
+    ALLERGEN_SESAME: "sésamo",
+    ALLERGEN_SULFITES: "sulfitos",
+    ALLERGEN_HONEY: "miel",
+}
+
+
+def allergens_es(allergens) -> str:
+    """
+    Formatea un conjunto de alérgenos canónicos como lista en español.
+
+    Colapsa redundancia del grupo lácteo: si está "milk", omite "lactose" y
+    "dairy" — para el usuario son la misma cosa y "lactosa, leche, lácteos"
+    lee como ruido.
+    """
+    relevant = set(allergens)
+    if ALLERGEN_MILK in relevant:
+        relevant -= {ALLERGEN_LACTOSE, ALLERGEN_DAIRY}
+    return ", ".join(sorted(ALLERGEN_ES_LABELS.get(a, a) for a in relevant))
+
+
 # Targets sensoriales de alto riesgo — política conservadora para aromatizantes
 # cuyo target es un alérgeno crítico (no se puede asumir safe automáticamente).
 HIGH_RISK_FLAVORING_TARGETS: frozenset = frozenset({

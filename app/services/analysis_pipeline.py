@@ -43,8 +43,11 @@ from app.services.ingredient_facts import (
     GLUTEN_SOURCES,
     IngredientFacts,
     NUT_SOURCES,
+    Origin,
     ProductLegalDeclaration,
+    allergens_es,
 )
+from app.services.ingredient_explanations import explain_ingredient
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +144,7 @@ class PipelineStats:
     resolved_by_codex: int = 0
     resolved_by_off: int = 0
     resolved_by_kb: int = 0
+    resolved_by_pubchem: int = 0
     resolved_by_gemini: int = 0
     resolved_by_llm: int = 0
     resolved_by_policy: int = 0
@@ -150,12 +154,25 @@ class PipelineStats:
 
 
 @dataclass
+class TriggerIngredient:
+    """
+    Ingrediente concreto de la etiqueta que justifica el bloqueo de una
+    restricción. Sirve para explicar al usuario *qué* nombre técnico
+    encontrado en la lista es el responsable y *qué significa*.
+    """
+    name: str               # nombre como aparece en la etiqueta ("Albúmina")
+    explanation: str        # explicación legible ("proteína de la clara de huevo")
+    allergen: str           # alérgeno en español que disparó el match ("huevo")
+
+
+@dataclass
 class RestrictionVerdict:
     apto: bool
     motivo: Optional[str] = None
     fuente: str = "ingredient_analysis"  # legal_declaration | ingredient_analysis | flavoring_policy
     confidence: float = 1.0
     ingrediente_disparador: Optional[str] = None
+    trigger_ingredients: List[TriggerIngredient] = field(default_factory=list)
 
 
 @dataclass
@@ -198,7 +215,18 @@ class AnalysisPipeline:
         logger.info("FASE 1: OCR con Gemini Vision")
         ocr_result = await gemini_service.extract_and_classify(image_data, image_type)
         if not ocr_result.success:
-            status = 400 if ocr_result.error in ("poor_quality", "invalid_image") else 500
+            # Mapeo de error_type → HTTP status:
+            #   - poor_quality / invalid_image  → 400 (problema del input del usuario)
+            #   - quota_exhausted_daily         → 429 (Too Many Requests, semántica correcta;
+            #                                          permite que el frontend muestre el
+            #                                          modal de "Límite de solicitudes")
+            #   - resto (timeout, parse_failed) → 500
+            if ocr_result.error in ("poor_quality", "invalid_image"):
+                status = 400
+            elif ocr_result.error == "quota_exhausted_daily":
+                status = 429
+            else:
+                status = 500
             return PipelineResult(
                 success=False,
                 error=ocr_result.message or "Error en OCR",
@@ -218,7 +246,7 @@ class AnalysisPipeline:
             start_time=start_time,
         )
         result.ocr_result = ocr_result
-        result.stats.gemini_calls = 1
+        result.stats.gemini_calls += 1  # +1 por el OCR (run_from_text ya contó el LLM batch)
         return result
 
     async def run_from_text(
@@ -269,11 +297,13 @@ class AnalysisPipeline:
         declaration_warnings: List[str] = []
         if unsupported_contains:
             warning = (
-                f"Declaración CONTIENE sin sustento en ingredientes visibles: "
-                f"{sorted(unsupported_contains)}"
+                f"La etiqueta declara contener {allergens_es(unsupported_contains)}, "
+                f"pero ningún ingrediente de la lista lo confirma."
             )
             declaration_warnings.append(warning)
-            logger.warning(f"Cross-check: {warning}")
+            logger.warning(
+                f"Cross-check: declaración no corroborada {sorted(unsupported_contains)}"
+            )
 
         # ── FASE 3: Resolución por declaración legal ──
         logger.info("FASE 3: Resolución por declaración legal")
@@ -300,10 +330,25 @@ class AnalysisPipeline:
             translation_pairs=translation_pairs,
         )
 
+        # ── FASE 4.4: PubChem fallback (compuestos químicos no resueltos) ──
+        # Corre antes del LLM: cada compuesto que PubChem identifica es una
+        # clasificación que Gemini ya no hace → ahorro de cuota. Sin API key.
+        n_pubchem_resolved = await enrichment_service.apply_pubchem_fallback(
+            facts_list=ingredient_facts,
+            parsed_list=parsed_list,
+            db=db,
+        )
+        if n_pubchem_resolved:
+            logger.info(f"FASE 4.4: PubChem resolvió {n_pubchem_resolved} ingrediente(s)")
+
         # ── FASE 4.5: LLM batch fallback ──
         # Una sola llamada Gemini para todos los ingredientes que cayeron a
         # tier 5 en esta imagen. Respeta el flag LLM_FALLBACK_ENABLED y persiste
         # al KB lo que supere el threshold (futuras imágenes lo resuelven sin LLM).
+        # Contabilizamos la llamada del LLM batch ANTES de ejecutarla: después,
+        # los ingredientes resueltos ya no matchean el predicado y el conteo daría 0.
+        if enrichment_service.will_call_llm(ingredient_facts):
+            stats.gemini_calls += 1
         n_llm_resolved = await enrichment_service.apply_llm_batch_fallback(
             facts_list=ingredient_facts,
             parsed_list=parsed_list,
@@ -323,6 +368,17 @@ class AnalysisPipeline:
                 continue
             verdict = self._evaluate_predicate_for_product(restriction, ingredient_facts)
             legal_verdicts[restriction] = verdict
+
+        # ── FASE 5.5: Trigger ingredients ──
+        # Para cada restricción bloqueada, listamos los ingredientes concretos
+        # de la etiqueta que la justifican, con su explicación legible.
+        # Esto da contexto educativo al usuario (qué nombre técnico = qué).
+        for restriction, verdict in legal_verdicts.items():
+            if verdict.apto:
+                continue
+            verdict.trigger_ingredients = self._find_trigger_ingredients(
+                restriction, ingredient_facts
+            )
 
         # ── FASE 6: Veredicto + confianza ──
         user_verdict = all(v.apto for v in legal_verdicts.values())
@@ -393,7 +449,7 @@ class AnalysisPipeline:
             )
             return RestrictionVerdict(
                 apto=False,
-                motivo=f"Declaración legal CONTIENE: {', '.join(sorted(matched))}{note}",
+                motivo=f"Declaración legal CONTIENE: {allergens_es(matched)}{note}",
                 fuente="legal_declaration",
                 confidence=confidence,
             )
@@ -401,7 +457,7 @@ class AnalysisPipeline:
             matched = declaration.matched_allergens(allergen_set)
             return RestrictionVerdict(
                 apto=False,
-                motivo=f"Declaración legal PUEDE CONTENER: {', '.join(sorted(matched))}",
+                motivo=f"Declaración legal PUEDE CONTENER: {allergens_es(matched)}",
                 fuente="legal_declaration",
                 confidence=0.95,
             )
@@ -470,6 +526,50 @@ class AnalysisPipeline:
         )
 
     @staticmethod
+    def _find_trigger_ingredients(
+        restriction: str,
+        ingredient_facts: List[IngredientFacts],
+    ) -> List[TriggerIngredient]:
+        """
+        Devuelve la lista de ingredientes de la etiqueta que justifican el
+        bloqueo de una restricción. Útil para mostrarle al usuario *qué*
+        nombre técnico encontrado en la lista es el responsable.
+
+        Cobertura — replica la lógica del predicado:
+          - Allergens del ingrediente que intersectan el allergen_set de la
+            restricción.
+          - Para "vegano": también incluye ingredientes con origin=ANIMAL
+            aunque no tengan allergen tag específico (ej. "miel" cuando solo
+            está tagueada como animal sin honey-allergen).
+        """
+        allergen_set = _RESTRICTION_ALLERGEN_SETS.get(restriction)
+        if not allergen_set:
+            return []
+
+        seen_names: Set[str] = set()
+        triggers: List[TriggerIngredient] = []
+        for facts in ingredient_facts:
+            matched = facts.allergens & allergen_set
+            # Etiqueta visible al usuario — siempre en español.
+            allergen_label = allergens_es(matched) if matched else None
+
+            if not matched and restriction == "vegano" and facts.origin == Origin.ANIMAL:
+                allergen_label = "origen animal"
+            elif not matched:
+                continue
+
+            key = facts.name_es.strip().lower()
+            if key in seen_names:
+                continue
+            seen_names.add(key)
+            triggers.append(TriggerIngredient(
+                name=facts.name_es.strip(),
+                explanation=explain_ingredient(facts),
+                allergen=allergen_label or "",
+            ))
+        return triggers
+
+    @staticmethod
     def _tally_enrichment_stats(
         facts_list: List[IngredientFacts], stats: PipelineStats
     ) -> None:
@@ -480,6 +580,8 @@ class AnalysisPipeline:
                 stats.resolved_by_off += 1
             elif "kb_cache" in f.sources:
                 stats.resolved_by_kb += 1
+            elif "pubchem" in f.sources:
+                stats.resolved_by_pubchem += 1
             elif "gemini" in f.sources:
                 stats.resolved_by_gemini += 1
             elif "llm_fallback" in f.sources:

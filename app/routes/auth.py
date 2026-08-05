@@ -47,8 +47,13 @@ async def registrar_usuario(
     
     nuevo_usuario = create_user(db, user_data_dict)
 
-    # Generar token inmediatamente después del registro
-    token = create_access_token(data={"sub": str(nuevo_usuario.id)})
+    # Generar token inmediatamente después del registro.
+    # Los usuarios nuevos nunca son admin por defecto — el flag is_admin se
+    # asigna manualmente desde el panel de administración o por seed.
+    token = create_access_token(data={
+        "sub": str(nuevo_usuario.id),
+        "is_admin": bool(getattr(nuevo_usuario, "is_admin", False)),
+    })
 
     return Token(access_token=token, token_type="bearer")
 
@@ -73,6 +78,9 @@ async def iniciar_sesion(
     if not usuario or not usuario.verify_password(user_data.password):
         raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos.")
 
-    token = create_access_token(data={"sub": str(usuario.id)})
+    token = create_access_token(data={
+        "sub": str(usuario.id),
+        "is_admin": bool(getattr(usuario, "is_admin", False)),
+    })
 
     return Token(access_token=token, token_type="bearer")

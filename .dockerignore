@@ -1,0 +1,25 @@
+# No incluir cosas pesadas o irrelevantes en la imagen
+env/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.git/
+.gitignore
+.env
+.env.local
+
+# Dataset y evaluación (no van a producción)
+Dataset/
+evaluation/
+tests/
+
+# Scripts de testing creados durante desarrollo
+test_*.py
+
+# Notas / outputs locales
+*.log
+*.db.backup
+nutriguide.db

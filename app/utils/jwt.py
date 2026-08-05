@@ -29,6 +29,13 @@ def extract_user_id(token: str) -> str:
         raise HTTPException(status_code=403, detail="Token inválido")
     return sub
 
+
+def extract_is_admin(token: str) -> bool:
+    """True si el token fue emitido para un usuario con flag is_admin."""
+    payload = decode_token(token)
+    return bool(payload.get("is_admin", False))
+
+
 class JWTBearer(HTTPBearer):
     async def __call__(self, request: Request):
         credentials: HTTPAuthorizationCredentials = await super().__call__(request)
@@ -40,4 +47,16 @@ class JWTBearer(HTTPBearer):
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=403, detail="Token inválido")
+        return token
+
+
+class AdminJWTBearer(JWTBearer):
+    """Igual que JWTBearer pero rechaza tokens sin is_admin=true."""
+    async def __call__(self, request: Request):
+        token = await super().__call__(request)
+        if not extract_is_admin(token):
+            raise HTTPException(
+                status_code=403,
+                detail="Esta acción requiere permisos de administrador",
+            )
         return token

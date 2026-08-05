@@ -50,6 +50,19 @@ _SYNTHETIC_KEYWORDS = [
 ]
 
 
+def _kw_match(corpus: str, keywords: List[str]) -> bool:
+    """
+    Match por palabra completa (con plural opcional), no por substring.
+
+    Evita el falso positivo clásico: `"oat" in "benzoate"` daba True y marcaba
+    gluten en el benzoato de sodio. Con borde de palabra, "oat"/"oats" matchea
+    solo cuando es realmente la palabra.
+    """
+    return any(
+        re.search(r"\b" + re.escape(kw) + r"s?\b", corpus) for kw in keywords
+    )
+
+
 @dataclass
 class PubChemResult:
     name_en: str
@@ -166,26 +179,24 @@ class PubChemService:
         ]).lower()
 
         # Inferir origen
-        if any(kw in text_corpus for kw in _ANIMAL_KEYWORDS):
+        if _kw_match(text_corpus, _ANIMAL_KEYWORDS):
             result.inferred_origin = "animal"
             result.evidence.append("PubChem: origen inferido ANIMAL")
-        elif any(kw in text_corpus for kw in _PLANT_KEYWORDS):
+        elif _kw_match(text_corpus, _PLANT_KEYWORDS):
             result.inferred_origin = "vegetal"
             result.evidence.append("PubChem: origen inferido VEGETAL")
-        elif any(kw in text_corpus for kw in _SYNTHETIC_KEYWORDS):
+        elif _kw_match(text_corpus, _SYNTHETIC_KEYWORDS):
             result.inferred_origin = "sintetico"
             result.evidence.append("PubChem: origen inferido SINTÉTICO")
 
         # Inferir restricciones
-        if any(kw in text_corpus for kw in _GLUTEN_KEYWORDS):
+        if _kw_match(text_corpus, _GLUTEN_KEYWORDS):
             result.is_tacc_safe = False
             result.evidence.append("PubChem: contiene keywords de gluten")
         else:
             result.is_tacc_safe = True
 
-        dairy_match = any(
-            kw in text_corpus for kw in ["milk", "dairy", "casein", "whey", "lactose"]
-        )
+        dairy_match = _kw_match(text_corpus, ["milk", "dairy", "casein", "whey", "lactose"])
         if dairy_match:
             result.is_lactose_safe = False
             result.is_vegan_safe = False
@@ -197,7 +208,7 @@ class PubChemService:
             result.is_lactose_safe = True
             result.is_vegan_safe = True
 
-        if any(kw in text_corpus for kw in _NUT_KEYWORDS):
+        if _kw_match(text_corpus, _NUT_KEYWORDS):
             result.is_nut_safe = False
             result.evidence.append("PubChem: contiene keywords frutos secos")
         else:

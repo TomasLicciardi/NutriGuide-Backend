@@ -29,6 +29,7 @@ from app.services.ingredient_facts import (
     IngredientFacts,
     NUT_SOURCES,
     Origin,
+    allergens_es,
 )
 
 
@@ -87,11 +88,11 @@ def _evaluate_sin_tacc(f: IngredientFacts) -> PredicateResult:
 
     if f.allergens_intersect(GLUTEN_SOURCES):
         matched = f.allergens & GLUTEN_SOURCES
-        return PredicateResult(False, f"contiene {', '.join(sorted(matched))}", f.confidence)
+        return PredicateResult(False, f"contiene {allergens_es(matched)}", f.confidence)
 
     if f.derived_from_any({"wheat", "barley", "rye", "oats"}):
         matched = f.derived_from & {"wheat", "barley", "rye", "oats"}
-        return PredicateResult(False, f"derivado de {', '.join(sorted(matched))}", f.confidence)
+        return PredicateResult(False, f"derivado de {allergens_es(matched)}", f.confidence)
 
     if _is_unverifiable_base(f):
         return _block_unverifiable("sin TACC", f)
@@ -105,7 +106,7 @@ def _evaluate_sin_lactosa(f: IngredientFacts) -> PredicateResult:
 
     if f.allergens_intersect(DAIRY_SOURCES):
         matched = f.allergens & DAIRY_SOURCES
-        return PredicateResult(False, f"contiene {', '.join(sorted(matched))}", f.confidence)
+        return PredicateResult(False, f"contiene {allergens_es(matched)}", f.confidence)
 
     if f.derived_from_any({"milk", "dairy"}):
         return PredicateResult(False, "derivado lácteo", f.confidence)
@@ -130,7 +131,7 @@ def _evaluate_sin_frutos_secos(f: IngredientFacts) -> PredicateResult:
 
     if f.allergens_intersect(NUT_SOURCES):
         matched = f.allergens & NUT_SOURCES
-        return PredicateResult(False, f"contiene {', '.join(sorted(matched))}", f.confidence)
+        return PredicateResult(False, f"contiene {allergens_es(matched)}", f.confidence)
 
     if _is_unverifiable_base(f):
         return _block_unverifiable("sin frutos secos", f)
@@ -146,7 +147,7 @@ def _evaluate_vegano(f: IngredientFacts) -> PredicateResult:
 
     if f.allergens_intersect(ANIMAL_SOURCES):
         matched = f.allergens & ANIMAL_SOURCES
-        return PredicateResult(False, f"origen animal: {', '.join(sorted(matched))}", f.confidence)
+        return PredicateResult(False, f"origen animal: {allergens_es(matched)}", f.confidence)
 
     if f.origin == Origin.ANIMAL:
         return PredicateResult(False, "ingrediente de origen animal", f.confidence)

@@ -40,9 +40,14 @@ from app.services.ingredient_facts import (
     TagProvenance,
 )
 from app.services.canonicalization_service import canonicalization_service
-from app.services.contextual_overrides import apply_override, resolve_ambiguous_term
+from app.services.contextual_overrides import (
+    apply_override,
+    resolve_ambiguous_term,
+    resolve_known_ingredient,
+)
 from app.services.parser import ParsedIngredient
 from app.services.loaders import codex_ins_loader, off_taxonomy_loader
+from app.services.pubchem_service import pubchem_service
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +192,17 @@ class EnrichmentService:
         if parsed.is_ley_25630_block:
             self._apply_ley_25630_policy(facts)
 
+        # Corrección incondicional de homónimos (ej. "nuez moscada" NO es fruto
+        # seco). Autoritativa: se aplica antes de KB/Codex/OFF/Gemini y corta el
+        # enrichment, evitando que esas fuentes le peguen el tag equivocado.
+        known = resolve_known_ingredient(parsed.name)
+        if known is not None:
+            apply_override(facts, known)
+            logger.info(
+                f"Known-ingredient override: '{parsed.name}' -> {known.canonical_name_es}"
+            )
+            return facts
+
         # Override contextual para términos ambiguos (ej: "burro" en yerba
         # mate). Se aplica ANTES de KB/Codex/OFF: si dispara, es autoritativo
         # y se salta el lookup externo que mete el falso positivo.
@@ -251,6 +267,51 @@ class EnrichmentService:
         # método apply_llm_batch_fallback más abajo.
         return facts
 
+    async def apply_pubchem_fallback(
+        self,
+        facts_list: List[IngredientFacts],
+        parsed_list: List[ParsedIngredient],
+        db: Session,
+    ) -> int:
+        """
+        Tier 4.4 — identificación química vía PubChem PUG-REST para los
+        ingredientes que quedaron sin origen tras KB/Codex/OFF.
+
+        Corre ANTES del LLM fallback (tier 4.5): cada compuesto que PubChem
+        resuelve es una clasificación que el LLM ya no tiene que hacer, lo que
+        baja el consumo de cuota Gemini. PubChem es gratis y sin API key.
+
+        Merge conservador (PubChem infiere por keywords, es ruidoso):
+          - solo aporta `origin` (si está UNKNOWN) y `description_es`.
+          - NO aporta flags de alérgenos: el match por substring da falsos
+            positivos ('oat' dentro de 'benzoate'). Eso queda en Codex/OFF/LLM.
+          - confianza 0.75 < Codex/OFF/KB → jamás domina el veredicto.
+
+        Modifica `facts_list` in-place. Retorna cuántos ingredientes tocó.
+        """
+        if not settings.PUBCHEM_ENABLED or not facts_list:
+            return 0
+
+        indices = [
+            i for i, f in enumerate(facts_list) if self._is_unresolved_base(f)
+        ]
+        if not indices:
+            return 0
+
+        names_en = [
+            facts_list[i].name_en or facts_list[i].name_es for i in indices
+        ]
+        results = await pubchem_service.identify_compounds(names_en)
+
+        applied = 0
+        for i, name_en in zip(indices, names_en):
+            res = results.get(name_en)
+            if res is None or not res.found:
+                continue
+            if self._apply_pubchem_result(facts_list[i], res):
+                applied += 1
+        return applied
+
     async def apply_llm_batch_fallback(
         self,
         facts_list: List[IngredientFacts],
@@ -276,12 +337,27 @@ class EnrichmentService:
         if not settings.LLM_FALLBACK_ENABLED or not facts_list:
             return 0
 
-        indices = [i for i, f in enumerate(facts_list) if self._should_use_llm_fallback(f)]
-        if not indices:
+        classify_indices = [
+            i for i, f in enumerate(facts_list)
+            if self._should_use_llm_fallback(f)
+        ]
+        # Ingredientes ya resueltos por OFF/Codex que tienen allergens pero
+        # no description_es. Los incluimos en el mismo batch para que Gemini
+        # les agregue una explicación humana; así el dialog puede mostrar
+        # "Lactosuero — derivado de la leche" en vez del fallback genérico.
+        # Una llamada en vez de dos.
+        classify_set = set(classify_indices)
+        describe_indices = [
+            i for i, f in enumerate(facts_list)
+            if i not in classify_set and self._needs_description_only(f)
+        ]
+
+        all_indices = classify_indices + describe_indices
+        if not all_indices:
             return 0
 
         items: List[Tuple[str, Optional[str]]] = [
-            (facts_list[i].name_es, facts_list[i].name_en) for i in indices
+            (facts_list[i].name_es, facts_list[i].name_en) for i in all_indices
         ]
         # Contexto = todos los ingredientes parseados, separados por coma.
         context_str = ", ".join(p.name for p in parsed_list if p.name)
@@ -290,12 +366,25 @@ class EnrichmentService:
 
         threshold = max(0.70, float(KB_CONFIG["min_write_confidence"]))
         applied = 0
-        for idx, result in zip(indices, results):
-            if result is None or result.confidence < threshold:
+        for idx, result in zip(all_indices, results):
+            if result is None:
                 continue
-            self._apply_llm_classification(facts_list[idx], result)
-            await self._save_to_kb(facts_list[idx], result, db)
-            applied += 1
+
+            if idx in classify_set:
+                # Camino normal: aplicar clasificación completa + persistir.
+                if result.confidence < threshold:
+                    continue
+                self._apply_llm_classification(facts_list[idx], result)
+                await self._save_to_kb(facts_list[idx], result, db)
+                applied += 1
+            else:
+                # Describe-only: NO sobreescribimos clasificación; sólo
+                # completamos description_es si vino una útil.
+                if result.description_es and not facts_list[idx].description_es:
+                    facts_list[idx].description_es = result.description_es.strip()
+                    if result.confidence >= threshold:
+                        await self._save_to_kb(facts_list[idx], result, db)
+                    applied += 1
         return applied
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -303,15 +392,53 @@ class EnrichmentService:
     # ═══════════════════════════════════════════════════════════════════════
 
     @staticmethod
-    def _should_use_llm_fallback(facts: IngredientFacts) -> bool:
-        """True si el ingrediente caeria en default-unsafe sin otro dato."""
-        if not settings.LLM_FALLBACK_ENABLED:
-            return False
+    def _is_unresolved_base(facts: IngredientFacts) -> bool:
+        """
+        True si el ingrediente quedaría en default-unsafe por falta de origen.
+
+        Población objetivo de los fallbacks (PubChem tier 4.4 y LLM tier 4.5):
+        no es aromatizante, es BASE/UNKNOWN y ninguna fuente fijó su origen.
+        """
         if facts.is_flavoring():
             return False
         if facts.category not in (IngredientCategory.BASE, IngredientCategory.UNKNOWN):
             return False
         return facts.origin == Origin.UNKNOWN
+
+    def will_call_llm(self, facts_list: List[IngredientFacts]) -> bool:
+        """
+        True si apply_llm_batch_fallback haría una llamada a Gemini para este
+        lote (hay al menos un ingrediente a clasificar o a describir). Permite
+        contabilizar gemini_calls con honestidad ANTES de ejecutar el batch.
+        """
+        return any(
+            self._should_use_llm_fallback(f) or self._needs_description_only(f)
+            for f in facts_list
+        )
+
+    @staticmethod
+    def _should_use_llm_fallback(facts: IngredientFacts) -> bool:
+        """True si el ingrediente caeria en default-unsafe sin otro dato."""
+        if not settings.LLM_FALLBACK_ENABLED:
+            return False
+        return EnrichmentService._is_unresolved_base(facts)
+
+    @staticmethod
+    def _needs_description_only(facts: IngredientFacts) -> bool:
+        """
+        True si el ingrediente ya está clasificado (tiene allergens) pero no
+        tiene descripción humana. Lo incluimos en el batch del LLM para que
+        Gemini complete la explicación — se piggy-backea en la misma llamada
+        que las clasificaciones reales, sin sumar RPM.
+
+        Solo aplica cuando hay riesgo de ser trigger ingredient: si no tiene
+        allergens, mostrar una descripción no aporta al diálogo de bloqueo.
+        """
+        if not settings.LLM_FALLBACK_ENABLED:
+            return False
+        if facts.description_es:
+            return False
+        return bool(facts.allergens) or facts.origin == Origin.ANIMAL
 
     @staticmethod
     def _context_string(name_es: str, context: Optional[List[str]]) -> str:
@@ -590,18 +717,16 @@ class EnrichmentService:
         if not facts.description_es and getattr(kb_entry, "description_es", None):
             facts.description_es = kb_entry.description_es
 
+        # Tags genéricos determinísticos. NO iterar sobre los frozensets:
+        # el orden de un set es arbitrario y producía tags engañosos
+        # (ej. harina de trigo tagueada "rye"). El tag genérico del grupo
+        # es suficiente para los predicados y honesto para el usuario.
         if kb_entry.is_tacc_safe is False:
-            for a in GLUTEN_SOURCES:
-                facts.add_allergen(a, prov)
-                break
+            facts.add_allergen("gluten", prov)
         if kb_entry.is_lactose_safe is False:
-            for a in DAIRY_SOURCES:
-                facts.add_allergen(a, prov)
-                break
+            facts.add_allergen("milk", prov)
         if kb_entry.is_nut_safe is False:
-            for a in NUT_SOURCES:
-                facts.add_allergen(a, prov)
-                break
+            facts.add_allergen("tree-nut", prov)
         if kb_entry.is_vegan_safe is False and facts.origin == Origin.UNKNOWN:
             facts.origin = Origin.ANIMAL
             facts._record_provenance("origin:animal", prov)
@@ -650,6 +775,43 @@ class EnrichmentService:
             facts.description_es = gemini_class.description_es
 
         facts.confidence = max(facts.confidence, _CONFIDENCE_BY_SOURCE["gemini"])
+
+    def _apply_pubchem_result(self, facts: IngredientFacts, res) -> bool:
+        """
+        Fusiona un PubChemResult, acotado a las señales en las que PubChem es
+        confiable:
+          - `origin`: solo si está UNKNOWN (nunca pisa otra fuente).
+          - `description_es`: solo si falta.
+
+        NO se importan los flags de alérgenos de PubChem: su inferencia por
+        keywords sobre la descripción produce falsos positivos (p.ej. el
+        substring 'oat' dentro de 'benzoate' marcaría gluten). Las decisiones
+        de alérgenos quedan en Codex/OFF/KB/LLM, que son fuentes confiables.
+
+        Retorna True si tocó algo (para contabilizar la fuente).
+        """
+        prov = TagProvenance(
+            source="pubchem",
+            confidence=_CONFIDENCE_BY_SOURCE["pubchem"],
+            evidence="; ".join(res.evidence) or f"PubChem CID {res.cid}",
+        )
+        changed = False
+
+        if facts.origin == Origin.UNKNOWN and res.inferred_origin:
+            mapped = _map_origin(res.inferred_origin)
+            if mapped != Origin.UNKNOWN:
+                facts.origin = mapped
+                facts._record_provenance(f"origin:{mapped.value}", prov)
+                changed = True
+
+        if res.description and not facts.description_es:
+            facts.description_es = res.description[:200].strip()
+            changed = True
+
+        if changed:
+            facts.confidence = max(facts.confidence, _CONFIDENCE_BY_SOURCE["pubchem"])
+            facts._record_provenance("source:pubchem", prov)
+        return changed
 
     @staticmethod
     def _compute_confidence(facts: IngredientFacts) -> float:

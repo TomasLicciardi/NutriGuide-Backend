@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Set, Tuple
 
+from app.core.config import settings
 from app.services.gemini_service import gemini_service
 from app.services.ingredient_facts import (
     ALLERGEN_BARLEY,
@@ -322,13 +323,13 @@ class LLMFallbackService:
             name_en=name_en or "null",
             context=context or "null",
         )
-        # gemini-2.5-flash-lite: free tier vigente, calidad suficiente para
-        # clasificación estructurada con few-shot. Reemplaza a gemini-2.0-flash-*
-        # cuya cuota free tier puede no estar habilitada según el proyecto.
+        # Usamos el mismo modelo que la Fase 1 (configurable vía
+        # GEMINI_VISION_MODEL en .env). Coherente y le saca partido al RPD
+        # más alto si el usuario configuró gemini-2.5-flash en lugar del lite.
         try:
             raw = await gemini_service.generate_text(
                 prompt,
-                model_name="gemini-2.5-flash-lite",
+                model_name=settings.GEMINI_VISION_MODEL,
                 temperature=0.1,
                 response_mime_type="application/json",
                 timeout=15,
@@ -374,7 +375,7 @@ class LLMFallbackService:
         try:
             raw = await gemini_service.generate_text(
                 prompt,
-                model_name="gemini-2.5-flash-lite",
+                model_name=settings.GEMINI_VISION_MODEL,
                 temperature=0.1,
                 response_mime_type="application/json",
                 timeout=30,

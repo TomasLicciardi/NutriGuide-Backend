@@ -42,12 +42,14 @@ def init_database():
     # Importar modelos para que SQLAlchemy los registre
     from app.models import user, history, product, ingredient, product_ingredient
 
-    # Crear tablas si no existen
-    inspector = inspect(engine)
-    if not inspector.get_table_names():
-        Base.metadata.create_all(bind=engine)
+    # `create_all` es idempotente: crea solo las tablas que faltan, no toca
+    # las existentes. Llamarlo siempre evita el caso donde existían `users`
+    # e `ingredients` de un run viejo pero faltaba `history` (que rompía el
+    # primer análisis de un usuario nuevo).
+    Base.metadata.create_all(bind=engine)
 
     _ensure_ingredients_columns()
+    _ensure_users_columns()
 
 
 def _ensure_ingredients_columns():
@@ -60,3 +62,18 @@ def _ensure_ingredients_columns():
     with engine.begin() as conn:
         if "provenance" not in columns:
             conn.execute(text("ALTER TABLE ingredients ADD COLUMN provenance VARCHAR"))
+
+
+def _ensure_users_columns():
+    """Agrega columnas faltantes a `users` (idempotente, compatible con SQLite)."""
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    columns = {c["name"] for c in inspector.get_columns("users")}
+    with engine.begin() as conn:
+        if "is_admin" not in columns:
+            # SQLite no soporta DEFAULT FALSE booleano nativamente; usamos 0/1.
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"
+            ))

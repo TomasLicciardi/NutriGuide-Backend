@@ -25,6 +25,14 @@ class Settings:
     MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
     MAIL_FROM = os.getenv("MAIL_FROM", "")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    # Modelo Gemini para Fase 1 (OCR + clasificación). Hacerlo configurable
+    # permite probar otros modelos (gemini-2.5-flash con RPM más holgado)
+    # sin tocar código. La 2.0-flash-lite tiene limit:0 en el free tier según
+    # el proyecto — por eso default es 2.5-flash-lite.
+    GEMINI_VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-2.5-flash-lite")
     LLM_FALLBACK_ENABLED = _env_bool("LLM_FALLBACK_ENABLED", True)
+    # Tier 4.4 — identificación química vía PubChem PUG-REST. Corre antes del
+    # LLM fallback para resolver compuestos sin gastar cuota Gemini. Sin API key.
+    PUBCHEM_ENABLED = _env_bool("PUBCHEM_ENABLED", True)
 
 settings = Settings()
