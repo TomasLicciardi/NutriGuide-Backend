@@ -1828,6 +1828,163 @@
   is_nut_safe: true
   is_vegan_safe: false
 
+# ── Lácteos con nombre técnico (adicionales) ──
+- name_es: grasa butirica
+  name_en: butterfat
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+- name_es: proteina de suero
+  name_en: whey protein
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+- name_es: solidos de leche
+  name_en: milk solids
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+- name_es: suero dulce
+  name_en: sweet whey
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+# ── Huevo con nombre técnico ──
+- name_es: ovoalbumina
+  name_en: ovalbumin
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+- name_es: lisozima
+  name_en: lysozyme
+  type: ADITIVO
+  origin: animal
+  function_tag: conservante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+- name_es: lecitina de huevo
+  name_en: egg lecithin
+  type: ADITIVO
+  origin: animal
+  function_tag: emulsionante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+# ── Origen animal no obvio (adicionales) ──
+- name_es: condroitina
+  name_en: chondroitin
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+- name_es: l-cisteina
+  name_en: l-cysteine
+  type: ADITIVO
+  origin: animal
+  function_tag: mejorador de masa
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+- name_es: manteca de cerdo
+  name_en: lard
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+- name_es: isinglass
+  name_en: isinglass
+  type: BASE
+  origin: animal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+# ── Gluten con nombre técnico (adicionales) ──
+- name_es: gluten de trigo
+  name_en: wheat gluten
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+- name_es: proteina de trigo
+  name_en: wheat protein
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+- name_es: jarabe de malta
+  name_en: malt syrup
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+- name_es: cebada malteada
+  name_en: malted barley
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+# ── Frutos secos con nombre técnico (adicionales) ──
+- name_es: gianduja
+  name_en: gianduja
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: false
+  is_vegan_safe: true
+- name_es: mazapan
+  name_en: marzipan
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: false
+  is_vegan_safe: true
+- name_es: nuez de brasil
+  name_en: brazil nut
+  type: BASE
+  origin: vegetal
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: false
+  is_vegan_safe: true
+
 - name_es: dioxido de silicio
   name_en: silicon dioxide
   type: ADITIVO

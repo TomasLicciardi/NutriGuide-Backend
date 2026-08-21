@@ -122,6 +122,29 @@ _CURATED_EXPLANATIONS: dict[str, str] = {
     "lecitina de soja": "emulsionante derivado de la soja",
     "edamame": "vainas de soja jóvenes",
     "tempeh": "soja fermentada",
+
+    # ── Lácteos adicionales (nombres técnicos) ──
+    "grasa butirica": "grasa de la leche (materia grasa láctea)",
+    "proteina de suero": "proteína del suero de la leche",
+    "solidos de leche": "componentes sólidos de la leche",
+    "suero dulce": "derivado líquido de la leche",
+
+    # ── Origen animal no obvio (adicionales) ──
+    "condroitina": "sustancia extraída del cartílago animal",
+    "l-cisteina": "aminoácido usado en panadería, tradicionalmente de origen animal (pelo/plumas)",
+    "cisteina": "aminoácido acondicionador de masa, tradicionalmente de origen animal",
+
+    # ── Gluten (nombres técnicos adicionales) ──
+    "gluten de trigo": "gluten puro extraído del trigo",
+    "proteina de trigo": "proteína de trigo (contiene gluten)",
+    "jarabe de malta": "jarabe de cebada germinada (contiene gluten)",
+    "cebada malteada": "cebada germinada (contiene gluten)",
+
+    # ── Frutos secos (nombres técnicos adicionales) ──
+    "gianduja": "pasta de avellanas y cacao (contiene fruto seco)",
+    "mazapan": "pasta de almendras (fruto seco)",
+    "nuez de brasil": "fruto seco (castaña de pará)",
+    "nuez de para": "fruto seco (castaña de pará)",
 }
 
 
