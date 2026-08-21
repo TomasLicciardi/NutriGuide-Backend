@@ -632,6 +632,14 @@ class AnalysisPipeline:
                     "fuente": v.fuente,
                     "confidence": v.confidence,
                     "ingrediente_disparador": v.ingrediente_disparador,
+                    "trigger_ingredients": [
+                        {
+                            "name": t.name,
+                            "explanation": t.explanation,
+                            "allergen": t.allergen,
+                        }
+                        for t in v.trigger_ingredients
+                    ],
                 }
                 for r, v in restrictions.items()
             },
