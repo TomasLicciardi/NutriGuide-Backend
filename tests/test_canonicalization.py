@@ -44,8 +44,11 @@ def test_cheese_varieties_canonicalize_without_vegan_cheese():
 
 
 def test_processing_state_candidates_keep_original_as_fallback():
+    # La regla milk_variants normaliza las variedades de leche al termino
+    # canonico "leche" (misma huella alergenica). El nombre original se
+    # conserva como candidato de fallback para el lookup en KB/OFF.
     result = _canon("leche entera pasteurizada")
-    assert result.canonical_name_es == "leche entera"
+    assert result.canonical_name_es == "leche"
     assert "leche entera pasteurizada" in result.candidates_es
 
 

@@ -57,7 +57,7 @@ async def root():
         "version": "3.0.0",
         "pipeline": [
             "Fase 1: OCR + clasificación con Gemini Vision (1 sola llamada paga)",
-            "Fase 2: Parser estructural argentino (Lark) → ParsedIngredient + ProductLegalDeclaration",
+            "Fase 2: Parser estructural argentino (gramática de reglas) → ParsedIngredient + ProductLegalDeclaration",
             "Fase 3: Resolución por declaración legal (CONTIENE / PUEDE CONTENER / claims)",
             "Fase 4: Enrichment paralelo (Codex INS + OFF taxonomy + KB local + Gemini)",
             "Fase 4.5: LLM batch fallback (1 llamada Gemini agrupada para unresolved)",
