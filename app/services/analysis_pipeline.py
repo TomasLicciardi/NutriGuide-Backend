@@ -380,6 +380,21 @@ class AnalysisPipeline:
             verdict.trigger_ingredients = self._find_trigger_ingredients(
                 restriction, ingredient_facts
             )
+            # Caso "PUEDE CONTENER" sin ingrediente que lo respalde: la receta
+            # está limpia y el bloqueo viene solo de la advertencia de
+            # contaminación cruzada del fabricante. Decirlo explícitamente es
+            # más útil que mostrar la declaración sola: le informa al usuario
+            # que el análisis de la lista SÍ se hizo y salió sin hallazgos.
+            if (
+                not verdict.trigger_ingredients
+                and verdict.fuente == "legal_declaration"
+                and verdict.motivo
+                and "PUEDE CONTENER" in verdict.motivo
+            ):
+                verdict.motivo = (
+                    f"{verdict.motivo} — el fabricante advierte trazas por "
+                    f"contaminación cruzada. No está en la receta."
+                )
 
         # ── FASE 6: Veredicto + confianza ──
         user_verdict = all(v.apto for v in legal_verdicts.values())
@@ -668,6 +683,9 @@ class AnalysisPipeline:
                 "may_contain": sorted(declaration.may_contain) if declaration else [],
                 "positive_claims": sorted(declaration.positive_claims) if declaration else [],
                 "raw_text": declaration.raw_text if declaration else None,
+                # Auditoría interna: declaraciones que ningún ingrediente
+                # respalda. No se le muestra al usuario, pero queda guardado.
+                "warnings": list(pipeline_result.declaration_warnings),
             },
             "overall_confidence": pipeline_result.overall_confidence,
         }

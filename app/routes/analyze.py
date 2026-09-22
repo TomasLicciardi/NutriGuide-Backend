@@ -114,7 +114,13 @@ async def analizar_producto(
             may_contain=sorted(result.declaration.may_contain) if result.declaration else [],
             positive_claims=sorted(result.declaration.positive_claims) if result.declaration else [],
             raw_text=result.declaration.raw_text if result.declaration else None,
-            warnings=result.declaration_warnings,
+            # El cross-check de declaraciones no corroboradas es un control
+            # interno de auditoría (detecta cuando el OCR declara un alérgeno
+            # que ningún ingrediente respalda). No se le muestra al usuario:
+            # no cambia el veredicto y sólo genera ruido, sobre todo cuando el
+            # producto resulta apto. Queda registrado en result_json para
+            # revisarlo desde el panel de administración.
+            warnings=[],
         ),
         overall_confidence=result.overall_confidence,
         stats=StatsResponse(

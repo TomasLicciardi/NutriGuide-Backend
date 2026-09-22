@@ -220,3 +220,15 @@ def explain_ingredient(facts: "IngredientFacts") -> str:
     # que la UI no muestre una tarjeta en blanco. El front tiene su propio
     # guard (defensa en profundidad), pero el backend es la fuente de verdad.
     return "sin información adicional disponible"
+
+
+def has_curated_explanation(name_es: str) -> bool:
+    """
+    True si el diccionario curado ya cubre este ingrediente.
+
+    Lo usa el enrichment para no gastar una llamada al LLM pidiendo una
+    descripción que nunca se mostraría: `explain_ingredient` da prioridad al
+    diccionario curado por sobre la description_es del KB.
+    """
+    normalized = _normalize(name_es or "")
+    return any(key in normalized for key in _CURATED_EXPLANATIONS)

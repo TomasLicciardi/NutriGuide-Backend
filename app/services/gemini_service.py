@@ -38,6 +38,39 @@ model = genai.GenerativeModel(settings.GEMINI_VISION_MODEL)
 logger.info(f"Gemini Vision: usando modelo '{settings.GEMINI_VISION_MODEL}'")
 
 
+# ── Rotación de modelos por cuota ──
+# El free tier limita a 20 requests por día POR MODELO, así que cuando uno se
+# agota conviene pasar al siguiente en vez de devolver error. El orden es por
+# velocidad: flash-lite responde en ~3s y flash en ~25s (los modelos 2.5 razonan
+# antes de responder y el SDK 0.8.5 no permite desactivarlo).
+_MODEL_FALLBACKS = [
+    m.strip() for m in os.getenv(
+        "GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash-lite,gemini-2.5-flash"
+    ).split(",") if m.strip()
+]
+# Modelos cuya cuota diaria ya se agotó en este proceso. Se limpia al reiniciar.
+_exhausted_models: set = set()
+
+
+def _model_chain() -> List[str]:
+    """Modelo configurado primero, después los de respaldo, sin repetir."""
+    chain = [settings.GEMINI_VISION_MODEL] + _MODEL_FALLBACKS
+    seen, out = set(), []
+    for m in chain:
+        if m and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+
+def _available_models() -> List[str]:
+    """Modelos de la cadena que todavía tienen cuota en este proceso."""
+    disponibles = [m for m in _model_chain() if m not in _exhausted_models]
+    # Si se agotaron todos, reintentamos la cadena completa: puede haber pasado
+    # el reset diario desde que los marcamos.
+    return disponibles or _model_chain()
+
+
 # ── Rate limiter para el free tier de Gemini ──
 # Free tier de gemini-2.0-flash: 15 RPM. Mantenemos margen y permitimos 12 RPM
 # para no rozar el límite con clock skew. El limiter es global porque la cuota
@@ -217,7 +250,11 @@ class GeminiService:
             prompt = self._get_unified_prompt()
             response = await self._call_gemini_with_retry(
                 content=[prompt, {"mime_type": "image/jpeg", "data": imagen_bytes}],
-                timeouts=[25, 45],
+                # Un solo intento generoso: el cliente Android corta a los 60s y
+                # reintenta la petición completa, así que un segundo intento acá
+                # sólo lograría que la app reenvíe la imagen y se duplique el
+                # gasto de cuota de Gemini. Mejor fallar antes que ella.
+                timeouts=[45],
             )
 
             if response is None:
@@ -258,9 +295,22 @@ class GeminiService:
     # ══════════════════════════════════════════════════════════════════════
 
     def _get_unified_prompt(self) -> str:
+        """
+        Prompt de Fase 1: SOLO extracción, sin clasificar cada ingrediente.
+
+        La preclasificación se sacó a propósito. Era la fuente de menor
+        prioridad de todas (cualquier otra le ganaba en el merge) y obligaba a
+        Gemini a generar ~8x más tokens de salida por imagen: medido sobre
+        etiquetas de test_labels, 970/895/600 tokens con clasificación contra
+        110/106/64 sin ella, extrayendo exactamente los mismos ingredientes.
+
+        La caracterización queda en manos de las fuentes verificables (Codex,
+        Open Food Facts, PubChem, KB) y, para lo que ninguna resuelve, del
+        fallback agrupado en una única llamada.
+        """
         return """Analiza esta etiqueta de producto alimenticio (Argentina/Latinoamérica).
 
-TAREA DOBLE: Extrae los ingredientes Y clasifica cada uno.
+TAREA: Extrae ÚNICAMENTE la lista de ingredientes y el texto de alérgenos.
 
 ═══ EXTRACCIÓN DE INGREDIENTES ═══
 
@@ -288,17 +338,6 @@ REGLAS CRÍTICAS PARA ETIQUETAS ARGENTINAS:
 - Ingredientes con origen especificado: mantener descripción completa:
   "aceite vegetal de palma y canola (TBHQ)" -> "aceite vegetal de palma y canola", "TBHQ"
 
-═══ CLASIFICACIÓN POR INGREDIENTE ═══
-
-Para CADA ingrediente extraído, clasifica:
-- origin: "animal" | "vegetal" | "synthetic" | "mineral" | "unknown"
-- function: "conservante" | "colorante" | "emulsionante" | "estabilizante" | "acidulante" | "antioxidante" | "edulcorante" | "espesante" | "saborizante" | "base" | "otro"
-- contains_gluten: true SOLO si deriva de trigo, cebada, centeno o avena
-- contains_lactose: true SOLO si deriva de leche o lácteos
-- is_nut: true SOLO si es un fruto seco o maní
-- is_animal_derived: true si proviene de un animal (incluye lácteos, huevo, carne, miel, insectos)
-- description_es: Breve descripción en español (máximo 15 palabras)
-
 ═══ ALÉRGENOS ═══
 
 Extrae el texto completo de CONTIENE, PUEDE CONTENER, SIN TACC, LIBRE DE GLUTEN, etc.
@@ -307,18 +346,7 @@ Si la imagen NO es una etiqueta alimentaria o no se pueden leer ingredientes, re
 
 RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
 {
-  "ingredientes": [
-    {
-      "nombre": "harina de trigo enriquecida",
-      "origin": "vegetal",
-      "function": "base",
-      "contains_gluten": true,
-      "contains_lactose": false,
-      "is_nut": false,
-      "is_animal_derived": false,
-      "description_es": "Harina refinada de trigo con fortificación obligatoria"
-    }
-  ],
+  "ingredientes": ["harina de trigo enriquecida", "azúcar", "lecitina de soja"],
   "alergenos_advertencias": "CONTIENE: GLUTEN. PUEDE CONTENER: SOJA." o null,
   "confidence": 0.95
 }"""
@@ -427,22 +455,59 @@ RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
         attempt_429 = 0
         attempt_general = 0
 
+        # Modelo vigente de la cadena de rotación. Si agota su cuota diaria,
+        # `_next_model()` avanza al siguiente en vez de abortar el análisis.
+        modelos = _available_models()
+        idx_modelo = 0
+        modelo_actual = modelos[idx_modelo]
+        cliente = genai.GenerativeModel(modelo_actual)
+
+        def _next_model() -> bool:
+            """Avanza al siguiente modelo con cuota. False si no quedan."""
+            nonlocal idx_modelo, modelo_actual, cliente, attempt_general, attempt_429
+            _exhausted_models.add(modelo_actual)
+            idx_modelo += 1
+            if idx_modelo >= len(modelos):
+                return False
+            modelo_actual = modelos[idx_modelo]
+            cliente = genai.GenerativeModel(modelo_actual)
+            attempt_general = 0
+            attempt_429 = 0
+            logger.warning(f"Gemini: rotando a modelo de respaldo '{modelo_actual}'")
+            return True
+
         while attempt_general < len(timeouts):
             timeout = timeouts[attempt_general]
             try:
                 logger.info(
                     f"Gemini intento {attempt_general + 1}/{len(timeouts)}, "
-                    f"timeout={timeout}s (modelo: {settings.GEMINI_VISION_MODEL})"
+                    f"timeout={timeout}s (modelo: {modelo_actual})"
                 )
                 response = await asyncio.wait_for(
-                    asyncio.to_thread(model.generate_content, content),
+                    # retry=None desactiva el reintento interno del SDK. Sin
+                    # esto, un 429 con imagen tarda ~45s en aflorar (el SDK
+                    # reintenta con backoff por su cuenta) y nuestro wait_for
+                    # salta antes, disfrazando la falta de cuota de "timeout"
+                    # e impidiendo que rote de modelo. Con retry=None el 429
+                    # llega en menos de un segundo. Medido: 45.2s -> 0.7s.
+                    asyncio.to_thread(
+                        cliente.generate_content, content,
+                        request_options={"retry": None},
+                    ),
                     timeout=timeout,
                 )
                 return response
 
             except asyncio.TimeoutError:
-                logger.error(f"Timeout Gemini intento {attempt_general + 1}")
+                logger.error(
+                    f"Timeout Gemini intento {attempt_general + 1} "
+                    f"(modelo: {modelo_actual})"
+                )
                 attempt_general += 1
+                # Un modelo que no responde a tiempo tampoco sirve: probamos el
+                # siguiente de la cadena antes de darnos por vencidos.
+                if attempt_general >= len(timeouts) and _next_model():
+                    continue
 
             except Exception as e:
                 if not _is_429(e):
@@ -458,10 +523,18 @@ RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
                 kind = _classify_429(msg)
                 if kind == "daily":
                     logger.error(
-                        f"Gemini 429 RPD agotado para '{settings.GEMINI_VISION_MODEL}'. "
-                        f"Abortando — no sirve reintentar hasta el reset."
+                        f"Gemini 429 RPD agotado para '{modelo_actual}'."
                     )
-                    raise QuotaExhaustedError(settings.GEMINI_VISION_MODEL, msg)
+                    # Antes de rendirse, probar el siguiente modelo: la cuota
+                    # diaria del free tier es por modelo, así que otro puede
+                    # tener requests disponibles.
+                    if _next_model():
+                        continue
+                    logger.error(
+                        "Gemini: sin cuota en ningún modelo de la cadena "
+                        f"({', '.join(modelos)}). Abortando hasta el reset."
+                    )
+                    raise QuotaExhaustedError(modelo_actual, msg)
 
                 # RPM o tokens: esperar y reintentar
                 if attempt_429 >= len(backoff_429):

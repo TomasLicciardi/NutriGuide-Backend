@@ -438,7 +438,15 @@ class EnrichmentService:
             return False
         if facts.description_es:
             return False
-        return bool(facts.allergens) or facts.origin == Origin.ANIMAL
+        if not (bool(facts.allergens) or facts.origin == Origin.ANIMAL):
+            return False
+        # Si el diccionario curado ya explica este ingrediente, su descripción
+        # es la que se le muestra al usuario (tiene prioridad sobre la del KB).
+        # Pedirle una a Gemini sería gastar una llamada en texto que nunca se
+        # va a mostrar. Medido sobre la KB: 34 de 81 ingredientes con alérgeno
+        # y sin descripción caían acá.
+        from app.services.ingredient_explanations import has_curated_explanation
+        return not has_curated_explanation(facts.name_es)
 
     @staticmethod
     def _context_string(name_es: str, context: Optional[List[str]]) -> str:
