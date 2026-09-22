@@ -1,0 +1,9 @@
+# Dependencias sólo para desarrollo y tests.
+# Producción usa requirements.txt; la imagen Docker no instala esto.
+#
+#   pip install -r requirements-dev.txt
+#   python -m pytest
+
+-r requirements.txt
+
+pytest
