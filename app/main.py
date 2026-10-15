@@ -56,7 +56,7 @@ async def root():
         "message": "NutriGuide API — Pipeline multi-fuente con fact base / rule base",
         "version": "3.0.0",
         "pipeline": [
-            "Fase 1: OCR + clasificación con Gemini Vision (1 sola llamada paga)",
+            "Fase 1: OCR con Gemini Vision — sólo transcribe ingredientes y declaración legal (1 llamada)",
             "Fase 2: Parser estructural argentino (gramática de reglas) → ParsedIngredient + ProductLegalDeclaration",
             "Fase 3: Resolución por declaración legal (CONTIENE / PUEDE CONTENER / claims)",
             "Fase 4: Enrichment paralelo (Codex INS + OFF taxonomy + KB local + Gemini)",

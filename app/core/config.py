@@ -18,12 +18,6 @@ class Settings:
     DATABASE_NAME = os.getenv("DATABASE_NAME", "nutriguide.db")
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "changeme-in-production")
     JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "3600"))
-    MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
-    MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
-    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "True") == "True"
-    MAIL_USERNAME = os.getenv("MAIL_USERNAME", "")
-    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
-    MAIL_FROM = os.getenv("MAIL_FROM", "")
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     # Modelo Gemini para Fase 1 (OCR + clasificación). Hacerlo configurable
     # permite probar otros modelos (gemini-2.5-flash con RPM más holgado)

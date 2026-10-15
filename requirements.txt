@@ -31,5 +31,3 @@ Pillow
 # HTTP clients
 httpx                 # PubChem PUG-REST
 
-# Email
-fastapi-mail

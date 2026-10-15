@@ -9,7 +9,6 @@ from app.models.user import User
 from sqlalchemy.orm import Session
 from app.utils.security import verify_password, hash_password
 from app.utils.jwt import create_access_token
-from app.utils.mail import send_email
 from app.resources.user import (
     get_user_by_id,
     get_user_by_email,
@@ -123,44 +122,15 @@ async def cambiar_contrasena(
 
 @router.post("/forgot-password")
 async def forgot_password(request: Request, db: Session = Depends(get_db)):
-    data = await request.json()
-    email = data.get("email")
-
-    if not email:
-        raise HTTPException(status_code=400, detail="El email es requerido")
-
-    user = db.query(User).filter(User.email == email).first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-    # Crear token temporal para resetear contraseña
-    reset_token = create_access_token({"sub": str(user.id)})
-
-    # Armar cuerpo del email
-    body = f"""
-Hola {user.username},
-
-Recibimos una solicitud para recuperar tu contraseña en NutriGuide.
-
-Tu token de recuperación es:
-
-{reset_token}
-
-Este token expira en 30 minutos.
-
-Si no solicitaste este cambio, puedes ignorar este correo.
-
-Saludos,
-El equipo de NutriGuide
-"""    # Enviar correo
-    await send_email(
-        subject="Recuperación de contraseña - NutriGuide",
-        recipients=[user.email],
-        body=body
+    # La recuperación por correo quedó fuera del alcance de la tesis: no hay
+    # servidor de mail configurado y el flujo de la app era simulado. Se deja
+    # el endpoint para que un cliente viejo reciba un error claro en vez de
+    # un 404, y se resetea la contraseña desde el panel de administración.
+    raise HTTPException(
+        status_code=501,
+        detail="La recuperación de contraseña por correo no está habilitada. "
+               "Contactá al administrador.",
     )
-
-    return {"mensaje": "Se envió un email con instrucciones para recuperar la contraseña"}
 
 @router.post("/reset-password")
 async def reset_password(request: Request, db: Session = Depends(get_db)):
