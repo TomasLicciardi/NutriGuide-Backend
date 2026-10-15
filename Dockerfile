@@ -21,8 +21,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Instalación de dependencias Python (capa cacheable)
+# torch se instala primero desde el índice CPU: la versión por defecto trae
+# CUDA y la imagen pasa de ~2 GB a 11 GB. En el cluster no hay GPU.
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
 # Pre-descarga del modelo MarianMT (~312 MB) durante el build.
