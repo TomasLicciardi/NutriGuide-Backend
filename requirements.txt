@@ -23,6 +23,7 @@ passlib[bcrypt]
 google-generativeai
 transformers          # MarianMT (traducción ES→EN para OFF/PubChem)
 torch                 # backend de transformers
+sentencepiece         # tokenizer de MarianMT; sin esto falla en una instalación limpia
 
 # Image processing
 Pillow
