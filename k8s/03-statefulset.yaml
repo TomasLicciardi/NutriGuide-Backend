@@ -1,0 +1,130 @@
+# NutriGuide — StatefulSet con backend + admin compartiendo PVC.
+#
+# Por qué un solo Pod con 2 containers (sidecar pattern):
+#   - SQLite vive en un archivo. Compartir el archivo entre 2 Pods distintos
+#     requiere ReadWriteMany (RWX) en el StorageClass, que muchos clusters
+#     (incluido el default de UM Cloud) no soportan.
+#   - Containers del mismo Pod comparten volumes sin restricción de modo de
+#     acceso. Cada uno monta el PVC donde le conviene.
+#
+# Si el cluster soportara RWX (p.ej. NFS), se podría separar en dos workloads.
+# Para tesis y carga baja, este patrón es más simple y robusto.
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nutriguide
+  namespace: tomaslicciardi-dev
+  labels:
+    app: nutriguide
+spec:
+  serviceName: nutriguide-headless
+  replicas: 1   # SQLite no se escala horizontalmente; mantener en 1
+  selector:
+    matchLabels:
+      app: nutriguide
+  template:
+    metadata:
+      labels:
+        app: nutriguide
+    spec:
+      containers:
+        # ─── Backend FastAPI (Fase 1-6 del pipeline) ───
+        - name: backend
+          image: docker.io/tomaslicciardi/nutriguide-backend:v1
+          imagePullPolicy: Always
+          ports:
+            - name: http-backend
+              containerPort: 8000
+          env:
+            - name: DATABASE_PATH
+              valueFrom: { configMapKeyRef: { name: nutriguide-config, key: DATABASE_PATH } }
+            - name: DATABASE_NAME
+              valueFrom: { configMapKeyRef: { name: nutriguide-config, key: DATABASE_NAME } }
+            - name: JWT_ACCESS_TOKEN_EXPIRES
+              valueFrom: { configMapKeyRef: { name: nutriguide-config, key: JWT_ACCESS_TOKEN_EXPIRES } }
+            - name: GEMINI_VISION_MODEL
+              valueFrom: { configMapKeyRef: { name: nutriguide-config, key: GEMINI_VISION_MODEL } }
+            - name: GEMINI_MODEL_FALLBACKS
+              valueFrom: { configMapKeyRef: { name: nutriguide-config, key: GEMINI_MODEL_FALLBACKS } }
+            - name: GEMINI_RPM_LIMIT
+              valueFrom: { configMapKeyRef: { name: nutriguide-config, key: GEMINI_RPM_LIMIT } }
+            - name: LLM_FALLBACK_ENABLED
+              valueFrom: { configMapKeyRef: { name: nutriguide-config, key: LLM_FALLBACK_ENABLED } }
+            - name: JWT_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: nutriguide-secrets, key: JWT_SECRET_KEY } }
+            - name: GEMINI_API_KEY
+              valueFrom: { secretKeyRef: { name: nutriguide-secrets, key: GEMINI_API_KEY } }
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60   # MarianMT + loaders tardan ~30-50s
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+
+        # ─── Admin Panel (sidecar) ───
+        - name: admin
+          image: docker.io/tomaslicciardi/nutriguide-admin:v1
+          imagePullPolicy: Always
+          ports:
+            - name: http-admin
+              containerPort: 8001
+          env:
+            - name: DATABASE_PATH
+              valueFrom: { configMapKeyRef: { name: nutriguide-config, key: ADMIN_DATABASE_PATH } }
+            - name: PORT
+              valueFrom: { configMapKeyRef: { name: nutriguide-config, key: ADMIN_PORT } }
+            - name: SESSION_SECRET
+              valueFrom: { secretKeyRef: { name: nutriguide-secrets, key: SESSION_SECRET } }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "512Mi"
+
+  # PVC por replica — persistente entre reinicios del Pod.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 2Gi
+        storageClassName: longhorn

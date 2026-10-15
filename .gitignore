@@ -47,3 +47,4 @@ logs/
 
 # ── NOTA: data/off_taxonomy.sqlite SÍ se versiona (es cache OFF reproducible
 # por scripts/build_off_cache.py pero 6 MB y necesario para evaluation). ──
+evaluacion_imagenes.json

@@ -1,0 +1,58 @@
+# Ingress para exponer NutriGuide al exterior.
+#
+# Estrategia recomendada: subdominios distintos para backend y admin.
+# Con nip.io funciona sin configurar DNS:
+#
+#   tomaslicciardi-api.my.kube.um.edu.ar       → backend (Android pega acá)
+#   tomaslicciardi-admin.my.kube.um.edu.ar     → panel admin (browser)
+#
+# nip.io resuelve cualquier subdominio que tenga una IP embebida.
+# Si UM Cloud te asigna otro dominio fijo, reemplazá el host.
+#
+# Plan B si el Ingress no funciona: aplicar 06-nodeport-plan-b.yaml
+# y acceder directo por IP:NodePort.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nutriguide-backend
+  namespace: tomaslicciardi-dev
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+spec:
+  ingressClassName: nginx   # ← ajustar si el cluster usa traefik, etc.
+  rules:
+    - host: tomaslicciardi-api.my.kube.um.edu.ar
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nutriguide-backend
+                port:
+                  number: 80
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nutriguide-admin
+  namespace: tomaslicciardi-dev
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "5m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: tomaslicciardi-admin.my.kube.um.edu.ar
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nutriguide-admin
+                port:
+                  number: 80

@@ -1,0 +1,60 @@
+# Services para exponer backend y admin.
+#
+# - headless: requerido por el StatefulSet (no balancea, da DNS estable al Pod).
+# - backend (ClusterIP): para el Ingress y red interna.
+# - admin (ClusterIP): para el Ingress.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nutriguide-headless
+  namespace: tomaslicciardi-dev
+  labels:
+    app: nutriguide
+spec:
+  clusterIP: None        # headless: solo DNS, sin proxy
+  selector:
+    app: nutriguide
+  ports:
+    - name: backend
+      port: 8000
+      targetPort: 8000
+    - name: admin
+      port: 8001
+      targetPort: 8001
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nutriguide-backend
+  namespace: tomaslicciardi-dev
+  labels:
+    app: nutriguide
+    component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: nutriguide
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000   # backend escucha en 8000 dentro del pod
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nutriguide-admin
+  namespace: tomaslicciardi-dev
+  labels:
+    app: nutriguide
+    component: admin
+spec:
+  type: ClusterIP
+  selector:
+    app: nutriguide
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8001   # admin escucha en 8001 dentro del pod
