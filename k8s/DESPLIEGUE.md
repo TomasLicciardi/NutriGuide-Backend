@@ -159,3 +159,19 @@ antes de subir el nuevo (un solo escritor sobre SQLite, siempre).
   migra a PostgreSQL, se separan en dos Deployments.
 - **MarianMT dentro de la imagen:** evita 300 MB de descarga en cada
   arranque y que el readiness probe falle por timeout.
+
+---
+
+## Si `kubectl` dice `system:unauthenticated`
+
+El kubeconfig que genera Rancher vence a los **30 días**, aunque el token de
+API siga vigente. Regenerarlo desde la VM, sin pasar por la web:
+
+```bash
+rancher kubectl config view --raw > ~/.kube/config.new && install -m 600 ~/.kube/config.new ~/.kube/config
+kubectl config set-context --current --namespace=tomaslicciardi-dev
+```
+
+El token de API (`token-m6dpk`) vence el **14/12/2026**; después de esa fecha
+hay que crear una API key nueva en Rancher y repetir `kube-setup.sh`.
+Detalle completo en `PLAN_CONTINGENCIA.md` (raíz del proyecto).
