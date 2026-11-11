@@ -85,7 +85,7 @@ linea(db.exists(), f"base de datos {db} ({db.stat().st_size // 1024} KB)" if db.
       "(en la notebook la ruta C:\\Users\\Usuario\\... probablemente cambie)")
 
 # Datos locales
-for f in ["app/data/off_taxonomy.sqlite", "app/data/kb_seed.yaml", "app/data/ins_codes.yaml",
+for f in ["data/off_taxonomy.sqlite", "app/data/kb_seed.yaml", "app/data/ins_codes.yaml",
           "app/data/canonicalization_rules.yaml"]:
     linea((RAIZ / f).exists(), f, "Está en git; hacer git pull en backend/")
 
