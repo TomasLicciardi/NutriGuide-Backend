@@ -1,0 +1,1068 @@
+C:\Users\Usuario\AppData\Local\Programs\Python\Python313\Lib\site-packages\transformers\models\marian\tokenization_marian.py:175: UserWarning: Recommended: pip install sacremoses.
+  warnings.warn("Recommended: pip install sacremoses.")
+ERROR:app.services.gemini_service:Error Gemini intento 1: ServiceUnavailable: 503 This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.
+WARNING:app.services.analysis_pipeline:Cross-check: declaración no corroborada ['sulfites']
+ERROR:app.services.gemini_service:Error Gemini intento 1: ServiceUnavailable: 503 This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.
+WARNING:app.services.analysis_pipeline:Cross-check: declaración no corroborada ['lactose']
+
+################################################################################
+#  NUTRIGUIDE -- TEST E2E CON GEMINI VISION REAL
+#  N imagenes: 42, seed: 7
+################################################################################
+
+  Inicializando sistema (loaders, KB)...
+  Sistema listo.
+  Imagenes seleccionadas: ['foto11', 'foto5', 'foto13', 'foto21', 'foto2', 'foto3', 'foto18', 'foto4', 'foto12', 'foto10', 'foto1', 'foto9', 'foto17', 'foto14', 'foto20', 'foto7', 'foto22', 'foto24', 'foto15', 'foto8', 'foto16', 'foto23', 'foto19', 'foto6']
+
+################################################################################
+#  foto11  --  Ketchup
+#  archivo: foto11.jpeg
+################################################################################
+  Bytes leidos: 243,519
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (13):
+    - agua
+    - concentrado doble de tomate
+    - azúcar
+    - vinagre de alcohol
+    - maltodextrina
+    - sal
+    - cebolla en polvo
+    - ajo en polvo
+    - especias
+    - goma xántica
+    - ácido cítrico
+    - sorbato de potasio
+    - aromatizantes naturales e idénticos al natural
+  Confianza OCR: 0.95
+
+  --- Declaracion legal parseada ---
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.75)
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.75)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.75)
+    [OK] vegano                  APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.78)
+
+  --- Stats del pipeline ---
+  Total ingredientes:        13
+  Aromatizantes:             1
+  Resueltos por declaracion: 0
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         0
+  Resueltos por KB local:    12
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    1
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     2820ms
+  Wall clock (incluye init): 2820ms
+  Confianza global:          0.75
+
+################################################################################
+#  foto5  --  Salsa de tomate (tipo ketchup)
+#  archivo: foto5.jpeg
+################################################################################
+  Bytes leidos: 325,116
+  [FAIL] timeout: Timeout en extracción de ingredientes
+
+################################################################################
+#  foto13  --  Harina 0000
+#  archivo: foto13.jpeg
+################################################################################
+  Bytes leidos: 363,188
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (8):
+    - harina 0000 enriquecida
+    - mejoradores de harina (INS 341iii, INS 928)
+    - harina de trigo
+    - sulfato ferroso
+    - nicotinamida
+    - tiamina
+    - ácido fólico
+    - riboflavina
+  Texto de alergenos: CONTIENE DERIVADOS DE TRIGO. PUEDE CONTENER DERIVADOS DE SOJA.
+  Confianza OCR: 0.95
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['gluten', 'wheat']
+  PUEDE CONTENER: ['soy']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: gluten, trigo
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+    [OK] vegano                  APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+
+  --- Stats del pipeline ---
+  Total ingredientes:        9
+  Aromatizantes:             0
+  Resueltos por declaracion: 1
+  Resueltos por Codex INS:   2
+  Resueltos por OFF:         2
+  Resueltos por KB local:    5
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           2
+  Pipeline ms (interno):     9489ms
+  Wall clock (incluye init): 9489ms
+  Confianza global:          0.85
+
+################################################################################
+#  foto21  --  Atún en lata
+#  archivo: foto21.jpeg
+################################################################################
+  Bytes leidos: 136,970
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (3):
+    - atún
+    - agua
+    - sal
+  Texto de alergenos: CONTIENE PESCADO
+  Confianza OCR: 0.99
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['fish']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: pescado
+
+  --- Stats del pipeline ---
+  Total ingredientes:        3
+  Aromatizantes:             0
+  Resueltos por declaracion: 1
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    2
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     3155ms
+  Wall clock (incluye init): 3155ms
+  Confianza global:          0.95
+
+################################################################################
+#  foto2  --  Cereales de maíz (tipo Zucaritas)
+#  archivo: foto2.jpeg
+################################################################################
+  Bytes leidos: 257,366
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (6):
+    - maíz
+    - azúcar
+    - sal
+    - extracto de malta
+    - antioxidante
+    - lecitina de soja
+  Texto de alergenos: CONTIENE SULFITOS Y DERIVADOS DE SOJA Y CEBADA. PUEDE CONTENER AVENA, ALMENDRA Y DERIVADOS DE TRIGO Y CENTENO.
+  Confianza OCR: 0.98
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['barley', 'gluten', 'soy', 'sulfites']
+  PUEDE CONTENER: ['oats', 'rye', 'tree-nut', 'wheat']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: cebada, gluten
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.65)
+    [OK] sin_frutos_secos        NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: frutos secos — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+    [OK] vegano                  APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.65)
+
+  --- Stats del pipeline ---
+  Total ingredientes:        6
+  Aromatizantes:             0
+  Resueltos por declaracion: 2
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    5
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     43350ms
+  Wall clock (incluye init): 43350ms
+  Confianza global:          0.65
+
+################################################################################
+#  foto3  --  Galletitas (tipo Criollitas)
+#  archivo: foto3.jpeg
+################################################################################
+  Bytes leidos: 259,279
+  [FAIL] timeout: Timeout en extracción de ingredientes
+
+################################################################################
+#  foto18  --  Sopa instantánea (Knorr)
+#  archivo: foto18.jpeg
+################################################################################
+  Bytes leidos: 161,149
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (16):ERROR:app.services.gemini_service:Timeout Gemini intento 1 (modelo: gemini-3.5-flash-lite)
+WARNING:app.services.gemini_service:Gemini: rotando a modelo de respaldo 'gemini-2.5-flash-lite'
+
+    - almidón de papa
+    - vegetales (zapallo, cebolla, perejil)
+    - azúcar
+    - maltodextrina
+    - jarabe de glucosa
+    - sal
+    - aceites vegetales
+    - romero
+    - caseinato de sodio
+    - pimienta negra
+    - glutamato monosódico
+    - inosinato disódico
+    - guanilato disódico
+    - goma xántica
+    - aromatizantes naturales
+    - annatto
+  Texto de alergenos: CONTIENE DERIVADO DE LECHE. PUEDE CONTENER PESCADO Y DERIVADOS DE SOJA Y DE TRIGO
+  Confianza OCR: 0.95
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['dairy', 'lactose', 'milk']
+  PUEDE CONTENER: ['fish', 'gluten', 'soy', 'wheat']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: gluten, trigo — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+    [OK] sin_lactosa             NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: leche
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.75)
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: leche
+
+  --- Stats del pipeline ---
+  Total ingredientes:        16
+  Aromatizantes:             1
+  Resueltos por declaracion: 3
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    14
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    1
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     3216ms
+  Wall clock (incluye init): 3216ms
+  Confianza global:          0.75
+
+################################################################################
+#  foto4  --  Snack de maíz (tipo Doritos)
+#  archivo: foto4.jpeg
+################################################################################
+  Bytes leidos: 304,553
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (19):
+    - harina de maíz
+    - aceite vegetal de palma y canola
+    - TBHQ
+    - sazonador
+    - sal
+    - maltodextrina de maíz
+    - ácido cítrico
+    - azúcar
+    - glutamato monosódico
+    - aceite de soja
+    - cebolla en polvo
+    - bicarbonato de sodio
+    - azul brillante FCF
+    - saborizante natural
+    - saborizante artificial
+    - hidrolizado de proteína de maíz
+    - extracto de levadura
+    - inosinato disódico
+    - guanilato disódico
+  Texto de alergenos: ELABORADO EN LINEAS QUE TAMBIÉN PROCESAN GLUTEN, HUEVO, SOYA, LECHE, MANÍ.
+  Confianza OCR: 0.98
+
+  --- Declaracion legal parseada ---
+  PUEDE CONTENER: ['dairy', 'egg', 'gluten', 'lactose', 'milk', 'peanut', 'soy']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: gluten — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+    [OK] sin_lactosa             NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: leche — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+    [OK] sin_frutos_secos        NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: maní — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: huevo, leche — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+
+  --- Stats del pipeline ---
+  Total ingredientes:        19
+  Aromatizantes:             2
+  Resueltos por declaracion: 4
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         2
+  Resueltos por KB local:    15
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    2
+  No resueltos:              0
+  Llamadas Gemini:           2
+  Pipeline ms (interno):     50025ms
+  Wall clock (incluye init): 50025ms
+  Confianza global:          0.95
+
+################################################################################
+#  foto12  --  Mostaza
+#  archivo: foto12.jpeg
+################################################################################
+  Bytes leidos: 178,614
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (26):
+    - agua
+    - vinagre de alcohol
+    - almidón modificado
+    - especia
+    - pimienta blanca
+    - cúrcuma
+    - canela
+    - nuez moscada
+    - semilla de apio
+    - ají molido
+    - mostaza blanca
+    - tomillo
+    - orégano
+    - jengibre
+    - laurel
+    - azúcar
+    - comino
+    - ajo
+    - cebolla
+    - ají
+    - goma xántica
+    - caramelo IV
+    - clorofila
+    - EDTA disódico cálcico
+    - BHA
+    - BHT
+  Texto de alergenos: PUEDE CONTENER TRIGO, AVENA, CEBADA Y CENTENO.
+  Confianza OCR: 0.99
+
+  --- Declaracion legal parseada ---
+  PUEDE CONTENER: ['barley', 'gluten', 'oats', 'rye', 'wheat']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: avena, cebada, centeno, gluten, trigo — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+    [OK] vegano                  APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+
+  --- Stats del pipeline ---
+  Total ingredientes:        26
+  Aromatizantes:             0
+  Resueltos por declaracion: 1
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    24
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    1
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     3770ms
+  Wall clock (incluye init): 3770ms
+  Confianza global:          0.85
+
+################################################################################
+#  foto10  --  Mayonesa/aderezo
+#  archivo: foto10.jpeg
+################################################################################
+  Bytes leidos: 308,568
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (15):
+    - agua
+    - aceite de girasol
+    - azúcar
+    - extracto de tomate
+    - almidón modificado
+    - sal
+    - vinagre de alcohol
+    - huevo líquido
+    - jugo concentrado de limón
+    - goma xántica
+    - ácido sórbico
+    - ácido fosfórico
+    - EDTA disódico cálcico
+    - BHA
+    - BHT
+  Texto de alergenos: CONTIENE HUEVO.
+  Confianza OCR: 0.99
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['egg']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: huevo
+
+  --- Stats del pipeline ---
+  Total ingredientes:        15
+  Aromatizantes:             0
+  Resueltos por declaracion: 1
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    14
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     1499ms
+  Wall clock (incluye init): 1499ms
+  Confianza global:          0.95WARNING:app.services.analysis_pipeline:Cross-check: declaración no corroborada ['soy']
+ERROR:app.services.gemini_service:Timeout Gemini text-only (30s)
+
+
+################################################################################
+#  foto1  --  Avena arrollada
+#  archivo: foto1.jpeg
+################################################################################
+  Bytes leidos: 251,227
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (2):
+    - Avena arrollada
+    - Hojuelas de avena
+  Texto de alergenos: CONTIENE AVENA. PUEDE CONTENER: TRIGO, SOJA, CEBADA, CENTENO Y MANÍ.
+CONTIENE: GLUTEN.
+  Confianza OCR: 0.98
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['gluten', 'oats']
+  PUEDE CONTENER: ['barley', 'peanut', 'rye', 'soy', 'wheat']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: avena, gluten
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+    [OK] sin_frutos_secos        NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: maní — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+    [OK] vegano                  APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+
+  --- Stats del pipeline ---
+  Total ingredientes:        2
+  Aromatizantes:             0
+  Resueltos por declaracion: 2
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    1
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           2
+  Pipeline ms (interno):     10716ms
+  Wall clock (incluye init): 10716ms
+  Confianza global:          0.85
+
+################################################################################
+#  foto9  --  Harina de trigo 000
+#  archivo: foto9.jpeg
+################################################################################
+  Bytes leidos: 254,437
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (1):
+    - harina de trigo enriquecida
+  Texto de alergenos: CONTIENE DERIVADOS DE TRIGO. PUEDE CONTENER HUEVO Y SOJA.
+  Confianza OCR: 0.99
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['gluten', 'wheat']
+  PUEDE CONTENER: ['egg', 'soy']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: gluten, trigo
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: huevo — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+
+  --- Stats del pipeline ---
+  Total ingredientes:        1
+  Aromatizantes:             0
+  Resueltos por declaracion: 2
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    0
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     1434ms
+  Wall clock (incluye init): 1434ms
+  Confianza global:          0.95
+
+################################################################################
+#  foto17  --  Caldo en cubo (Knorr)
+#  archivo: foto17.jpeg
+################################################################################
+  Bytes leidos: 118,274
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (20):
+    - sal
+    - grasa vegetal
+    - almidón de maíz no modificado
+    - azúcar
+    - aceite de palma
+    - antioxidante BHA/BHT
+    - pimienta roja
+    - perejil
+    - laurel en polvo
+    - ajo en polvo
+    - carne bovina deshidratada
+    - resaltadores de sabor
+    - glutamato monosódico
+    - inosinato de sodio
+    - aromatizantes
+    - colorantes
+    - caramelo
+    - acidulante
+    - ácido cítrico
+    - cebada
+  Texto de alergenos: PARA ARGENTINA Y PARAGUAY: CONTIENE DERIVADOS DE SOJA. PUEDE CONTENER CEBADA. PARA URUGUAY: CONTIENE DERIVADOS DE SOJA. PUEDE CONTENER APIO Y CEBADA.
+  Confianza OCR: 0.97
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['soy']
+  PUEDE CONTENER: ['barley', 'celery', 'gluten']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: cebada, gluten
+    [!!] sin_lactosa             NO APTO  (esperado: APTO, fuente: ingredient_analysis, conf: 0.50)
+           motivo: resaltadores de sabor: ingrediente base no verificable — sin fuentes para determinar si cumple 'sin lactosa'
+    [!!] sin_frutos_secos        NO APTO  (esperado: APTO, fuente: ingredient_analysis, conf: 0.50)
+           motivo: resaltadores de sabor: ingrediente base no verificable — sin fuentes para determinar si cumple 'sin frutos secos'
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: ingredient_analysis, conf: 0.95)
+           motivo: carne bovina deshidratada: ingrediente de origen animal
+
+  --- Stats del pipeline ---
+  Total ingredientes:        20
+  Aromatizantes:             1
+  Resueltos por declaracion: 1
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    17
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    1
+  No resueltos:              1
+  Llamadas Gemini:           2
+  Pipeline ms (interno):     33576ms
+  Wall clock (incluye init): 33576ms
+  Confianza global:          0.50
+
+################################################################################
+#  foto14  --  Chocolatada en polvo (Nesquik)
+#  archivo: foto14.jpeg
+################################################################################
+  Bytes leidos: 217,252
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (8):
+    - Azúcar
+    - Cacao en polvo
+    - Suero de leche
+    - Vitaminas y Minerales (Vitaminas C, D y B1, Pirofosfato férrico, Sulfato de zinc)
+    - Sal
+    - Canela en polvo
+    - Emulsionante (lecitina de soja)
+    - Aromatizante natural (Vainilla)
+  Texto de alergenos: CONTIENE DERIVADOS DE LECHE Y DE SOJA.
+  Confianza OCR: 0.98
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['dairy', 'lactose', 'milk', 'soy']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.75)
+    [OK] sin_lactosa             NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: leche
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.75)
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: leche
+
+  --- Stats del pipeline ---
+  Total ingredientes:        8
+  Aromatizantes:             1
+  Resueltos por declaracion: 2
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    6
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    1
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     1509ms
+  Wall clock (incluye init): 1509ms
+  Confianza global:          0.75
+
+################################################################################
+#  foto20  --  Puré de tomate
+#  archivo: foto20.jpeg
+################################################################################
+  Bytes leidos: 182,981
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (1):
+    - Extracto seco libre de cloruro de sodio
+  Confianza OCR: 0.98
+
+  --- Declaracion legal parseada ---
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)WARNING:app.services.analysis_pipeline:Cross-check: declaración no corroborada ['sulfites']
+ERROR:app.services.gemini_service:Timeout Gemini text-only (30s)
+
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+    [OK] vegano                  APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+
+  --- Stats del pipeline ---
+  Total ingredientes:        1
+  Aromatizantes:             0
+  Resueltos por declaracion: 0
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         0
+  Resueltos por KB local:    0
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   1
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           2
+  Pipeline ms (interno):     13957ms
+  Wall clock (incluye init): 13957ms
+  Confianza global:          0.85
+
+################################################################################
+#  foto7  --  Almidón de maíz (Maizena)
+#  archivo: foto7.jpeg
+################################################################################
+  Bytes leidos: 243,785
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (1):
+    - almidón de maíz
+  Texto de alergenos: CONTIENE SULFITOS.
+  Confianza OCR: 0.99
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['sulfites']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] vegano                  APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+
+  --- Stats del pipeline ---
+  Total ingredientes:        1
+  Aromatizantes:             0
+  Resueltos por declaracion: 0
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         0
+  Resueltos por KB local:    1
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     1087ms
+  Wall clock (incluye init): 1087ms
+  Confianza global:          0.95
+
+################################################################################
+#  foto22  --  Fideos al huevo
+#  archivo: foto22.jpeg
+################################################################################
+  Bytes leidos: 209,143
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (2):
+    - harina de trigo tipo 000 enriquecida
+    - huevo
+  Texto de alergenos: CONTIENE HUEVO Y DERIVADOS DE TRIGO. PUEDE CONTENER SOJA.
+  Confianza OCR: 0.98
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['egg', 'gluten', 'wheat']
+  PUEDE CONTENER: ['soy']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: gluten, trigo
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: huevo
+
+  --- Stats del pipeline ---
+  Total ingredientes:        2
+  Aromatizantes:             0
+  Resueltos por declaracion: 2
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         2
+  Resueltos por KB local:    0
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     1213ms
+  Wall clock (incluye init): 1213ms
+  Confianza global:          0.95
+
+################################################################################
+#  foto24  --  Fideos de sémola
+#  archivo: foto24.jpeg
+################################################################################
+  Bytes leidos: 180,100
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (4):
+    - harina de trigo enriquecida
+    - semola de trigo
+    - trigo candeal
+    - agua
+  Texto de alergenos: CONTIENE DERIVADOS DE TRIGO
+  Confianza OCR: 0.97
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['gluten', 'wheat']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: gluten, trigo
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+    [OK] vegano                  APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+
+  --- Stats del pipeline ---
+  Total ingredientes:        4
+  Aromatizantes:             0
+  Resueltos por declaracion: 1
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         3
+  Resueltos por KB local:    1
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           2
+  Pipeline ms (interno):     31442ms
+  Wall clock (incluye init): 31442ms
+  Confianza global:          0.85
+
+################################################################################
+#  foto15  --  Sal (Celusal)
+#  archivo: foto15.jpeg
+################################################################################
+  Bytes leidos: 187,140
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (3):
+    - sal (cloruro de sodio)
+    - yodato de potasio
+    - Antiaglutinantes: INS 551 y/o INS 536
+  Texto de alergenos: LIBRE DE GLUTEN - SIN T.A.C.C.
+  Confianza OCR: 1.00
+
+  --- Declaracion legal parseada ---
+  Claims positivos: ['sin_tacc']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                APTO     (esperado: APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración positiva del fabricante: sin_tacc
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.94)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.94)
+    [OK] vegano                  APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.94)
+
+  --- Stats del pipeline ---
+  Total ingredientes:        3
+  Aromatizantes:             0
+  Resueltos por declaracion: 1
+  Resueltos por Codex INS:   1
+  Resueltos por OFF:         0
+  Resueltos por KB local:    2
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     1270ms
+  Wall clock (incluye init): 1270ms
+  Confianza global:          0.94
+
+################################################################################
+#  foto8  --  Harina vitaminizada (idéntica a foto 6)
+#  archivo: foto8.jpeg
+################################################################################
+  Bytes leidos: 209,144
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (11):
+    - harina de trigo enriquecida
+    - fumarato ferroso
+    - óxido de zinc
+    - vitamina B2
+    - vitamina B6
+    - vitamina B1
+    - vitamina A
+    - vitamina B9
+    - vitamina D
+    - vitamina B12
+    - colorante: curcuma
+  Texto de alergenos: CONTIENE DERIVADOS DE TRIGO. PUEDE CONTENER HUEVO Y SOJA.
+  Confianza OCR: 1.00
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['gluten', 'wheat']
+  PUEDE CONTENER: ['egg', 'soy']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: gluten, trigo
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)WARNING:app.services.analysis_pipeline:Cross-check: declaración no corroborada ['barley', 'dairy', 'egg', 'lactose', 'milk', 'oats']
+ERROR:app.services.gemini_service:Timeout Gemini text-only (30s)
+ERROR:app.services.gemini_service:Timeout Gemini text-only (30s)
+
+           motivo: Declaración legal PUEDE CONTENER: huevo — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+
+  --- Stats del pipeline ---
+  Total ingredientes:        11
+  Aromatizantes:             0
+  Resueltos por declaracion: 2
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    10
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     1690ms
+  Wall clock (incluye init): 1690ms
+  Confianza global:          0.95
+
+################################################################################
+#  foto16  --  Tapas de empanadas
+#  archivo: foto16.jpeg
+################################################################################
+  Bytes leidos: 242,430
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (11):
+    - harina de trigo 000 enriquecida según ley 25630
+    - aceite de girasol alto oleico
+    - vinagre de alcohol
+    - sal
+    - cloruro de potasio
+    - humectante
+    - emulsionantes
+    - conservante
+    - acidulante
+    - harina 920
+    - lecitina de soja
+  Texto de alergenos: CONTIENE HUEVO, LECHE, DERIVADOS DE SOJA, DE AVENA Y DE CEBADA.
+  Confianza OCR: 0.98
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['barley', 'dairy', 'egg', 'gluten', 'lactose', 'milk', 'oats', 'soy']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: avena, cebada, gluten
+    [OK] sin_lactosa             NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.70)
+           motivo: Declaración legal CONTIENE: leche (declaración no corroborada por ingredientes visibles)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.85)
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.70)
+           motivo: Declaración legal CONTIENE: huevo, leche (declaración no corroborada por ingredientes visibles)
+
+  --- Stats del pipeline ---
+  Total ingredientes:        11
+  Aromatizantes:             0
+  Resueltos por declaracion: 3
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         2
+  Resueltos por KB local:    9
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           2
+  Pipeline ms (interno):     31599ms
+  Wall clock (incluye init): 31599ms
+  Confianza global:          0.70
+
+################################################################################
+#  foto23  --  Harina de trigo
+#  archivo: foto23.jpeg
+################################################################################
+  Bytes leidos: 240,208
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (3):
+    - harina de trigo enriquecida
+    - azúcar
+    - lecitina de soja
+  Texto de alergenos: CONTIENE DERIVADOS DE TRIGO. PUEDE CONTENER HUEVO Y SOJA.
+  Confianza OCR: 0.99
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['gluten', 'wheat']
+  PUEDE CONTENER: ['egg', 'soy']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: gluten, trigo
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: huevo — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+
+  --- Stats del pipeline ---
+  Total ingredientes:        3
+  Aromatizantes:             0
+  Resueltos por declaracion: 2
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         2
+  Resueltos por KB local:    1
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     1476ms
+  Wall clock (incluye init): 1476ms
+  Confianza global:          0.95
+
+################################################################################
+#  foto19  --  Tomate pelado enlatado
+#  archivo: foto19.jpeg
+################################################################################
+  Bytes leidos: 224,168
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (4):
+    - tomate pelado
+    - jugo de tomates
+    - regulador de acidez
+    - ácido cítrico
+  Confianza OCR: 0.99
+
+  --- Declaracion legal parseada ---
+
+  --- Veredictos por restriccion ---
+    [!!] sin_tacc                NO APTO  (esperado: APTO, fuente: ingredient_analysis, conf: 0.50)
+           motivo: jugo de tomates: ingrediente base no verificable — sin fuentes para determinar si cumple 'sin TACC'
+    [!!] sin_lactosa             NO APTO  (esperado: APTO, fuente: ingredient_analysis, conf: 0.50)
+           motivo: jugo de tomates: ingrediente base no verificable — sin fuentes para determinar si cumple 'sin lactosa'
+    [!!] sin_frutos_secos        NO APTO  (esperado: APTO, fuente: ingredient_analysis, conf: 0.50)
+           motivo: jugo de tomates: ingrediente base no verificable — sin fuentes para determinar si cumple 'sin frutos secos'
+    [!!] vegano                  NO APTO  (esperado: APTO, fuente: ingredient_analysis, conf: 0.50)
+           motivo: jugo de tomates: ingrediente base no verificable — sin fuentes para determinar si cumple 'vegano'
+
+  --- Stats del pipeline ---
+  Total ingredientes:        4
+  Aromatizantes:             0
+  Resueltos por declaracion: 0
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         0
+  Resueltos por KB local:    2
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              2
+  Llamadas Gemini:           2
+  Pipeline ms (interno):     32967ms
+  Wall clock (incluye init): 32967ms
+  Confianza global:          0.50
+
+################################################################################
+#  foto6  --  Harina de trigo vitaminizada
+#  archivo: foto6.jpeg
+################################################################################
+  Bytes leidos: 189,778
+
+  --- OCR (Gemini Vision) ---
+  Ingredientes detectados (11):
+    - harina de trigo enriquecida
+    - fumarato ferroso
+    - óxido de zinc
+    - vitamina B2
+    - vitamina B6
+    - vitamina B1
+    - vitamina A
+    - vitamina B9
+    - vitamina D
+    - vitamina B12
+    - colorante: cúrcuma
+  Texto de alergenos: CONTIENE DERIVADOS DE TRIGO. PUEDE CONTENER HUEVO Y SOJA.
+  Confianza OCR: 0.99
+
+  --- Declaracion legal parseada ---
+  CONTIENE: ['gluten', 'wheat']
+  PUEDE CONTENER: ['egg', 'soy']
+
+  --- Veredictos por restriccion ---
+    [OK] sin_tacc                NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.99)
+           motivo: Declaración legal CONTIENE: gluten, trigo
+    [OK] sin_lactosa             APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] sin_frutos_secos        APTO     (esperado: APTO, fuente: ingredient_analysis, conf: 0.95)
+    [OK] vegano                  NO APTO  (esperado: NO APTO, fuente: legal_declaration, conf: 0.95)
+           motivo: Declaración legal PUEDE CONTENER: huevo — el fabricante advierte trazas por contaminación cruzada. No está en la receta.
+
+  --- Stats del pipeline ---
+  Total ingredientes:        11
+  Aromatizantes:             0
+  Resueltos por declaracion: 2
+  Resueltos por Codex INS:   0
+  Resueltos por OFF:         1
+  Resueltos por KB local:    10
+  Resueltos por Gemini cls:  0
+  Resueltos por LLM batch:   0
+  Resueltos por politica:    0
+  No resueltos:              0
+  Llamadas Gemini:           1
+  Pipeline ms (interno):     2255ms
+  Wall clock (incluye init): 2255ms
+  Confianza global:          0.95
+
+################################################################################
+#  TOTAL: 24 imagenes en 308.82s (~12.87s/imagen)
+#  Llamadas Gemini estimadas: 24+ (1 OCR por imagen, + posibles batch fallbacks)
+################################################################################
