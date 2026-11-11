@@ -86,7 +86,7 @@ def verify_system_health():
             "canonicalization_loaded": canonicalization_service._initialized,
             "restrictions": ["sin_tacc", "sin_lactosa", "sin_frutos_secos", "vegano"],
             "pipeline_phases": [
-                "Fase 1: OCR + clasificación con Gemini Vision",
+                "Fase 1: OCR con Gemini Vision (sólo transcripción)",
                 "Fase 2: Parser estructural argentino",
                 "Fase 3: Resolución por declaración legal",
                 "Fase 4: Enrichment paralelo (Codex INS + OFF + KB + Gemini)",
