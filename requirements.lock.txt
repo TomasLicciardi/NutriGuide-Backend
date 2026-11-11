@@ -1,0 +1,30 @@
+# Versiones exactas con las que la tesis fue validada (PC de desarrollo,
+# Python 3.13, 11/11/2026). Usar ESTE archivo en la notebook y en cualquier
+# máquina nueva: pip install -r requirements.lock.txt
+#
+# requirements.txt queda sin fijar para Docker (allí la imagen ya congela
+# el entorno). Si se actualiza una versión acá, volver a correr pytest y
+# scripts/evaluar_imagenes.py antes de usarla en la defensa.
+
+# torch CPU (en la notebook no hace falta CUDA; ahorra ~8 GB)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0
+
+fastapi==0.115.12
+uvicorn[standard]==0.34.1
+python-multipart==0.0.20
+SQLAlchemy==2.0.40
+pydantic[email]==2.11.3
+PyYAML==6.0.2
+python-dotenv==1.1.1
+python-jose[cryptography]==3.4.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+google-generativeai==0.8.5
+transformers==4.56.0
+sentencepiece==0.2.1
+pillow==11.3.0
+httpx==0.28.1
+
+# desarrollo / tests
+pytest==9.1.1
