@@ -229,7 +229,7 @@ class GeminiService:
         (OCR + Tier 5 fallback).
         """
         try:
-            logger.info("Gemini: OCR + clasificación unificada")
+            logger.info("Gemini: OCR (sólo transcripción)")
 
             calidad = analizar_calidad_imagen(image_content)
             if not calidad["es_valida"]:
@@ -268,8 +268,7 @@ class GeminiService:
                 logger.error(f"Fallo parsing OCR. Respuesta: {response.text[:500]}")
 
             logger.info(
-                f"OCR+Clasificación: {len(result.ingredients)} ingredientes, "
-                f"{len(result.classifications)} clasificados"
+                f"OCR: {len(result.ingredients)} ingredientes transcriptos"
             )
             return result
 
