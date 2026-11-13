@@ -28,6 +28,17 @@ spec:
       labels:
         app: nutriguide
     spec:
+      # Longhorn no puede formatear volúmenes en este worker ("apparently in
+      # use by the system", multipath). Se excluye hasta que lo arreglen los
+      # administradores del cluster. Visto el 13/11/2026.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: ["cluster-01-workers2-kcnjb-c4wsf"]
       containers:
         # ─── Backend FastAPI (Fase 1-6 del pipeline) ───
         - name: backend
@@ -57,7 +68,7 @@ spec:
               valueFrom: { secretKeyRef: { name: nutriguide-secrets, key: GEMINI_API_KEY } }
           volumeMounts:
             - name: data
-              mountPath: /app/data
+              mountPath: /app/db     # NO /app/data: taparía off_taxonomy.sqlite de la imagen
           readinessProbe:
             httpGet:
               path: /health
@@ -83,7 +94,7 @@ spec:
 
         # ─── Admin Panel (sidecar) ───
         - name: admin
-          image: docker.io/tomaslicciardi/nutriguide-admin:v1
+          image: docker.io/tomaslicciardi/nutriguide-admin:v2
           imagePullPolicy: Always
           ports:
             - name: http-admin

@@ -5,7 +5,7 @@ metadata:
   namespace: tomaslicciardi-dev
 data:
   # Backend
-  DATABASE_PATH: "/app/data"
+  DATABASE_PATH: "/app/db"   # el volumen; /app/data lo trae la imagen (OFF taxonomy)
   DATABASE_NAME: "nutriguide.db"
   JWT_ACCESS_TOKEN_EXPIRES: "3600"
   GEMINI_VISION_MODEL: "gemini-3.5-flash-lite"
