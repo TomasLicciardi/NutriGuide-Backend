@@ -23,10 +23,12 @@ WORKDIR /app
 # Instalación de dependencias Python (capa cacheable)
 # torch se instala primero desde el índice CPU: la versión por defecto trae
 # CUDA y la imagen pasa de ~2 GB a 11 GB. En el cluster no hay GPU.
-COPY requirements.txt .
+# requirements.lock.txt fija las versiones validadas (bcrypt 4.0.1 con passlib,
+# transformers 4.56, torch 2.8 CPU). Sin fijar, pip trae bcrypt 5 y el registro
+# de usuarios falla con 500 (visto en el cluster el 13/11/2026).
+COPY requirements.lock.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.lock.txt
 
 # Pre-descarga del modelo MarianMT (~312 MB) durante el build.
 # Esto evita que el contenedor tarde 1-2 min descargándolo en el primer arranque

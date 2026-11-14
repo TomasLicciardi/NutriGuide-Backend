@@ -42,7 +42,7 @@ spec:
       containers:
         # ─── Backend FastAPI (Fase 1-6 del pipeline) ───
         - name: backend
-          image: docker.io/tomaslicciardi/nutriguide-backend:v1
+          image: docker.io/tomaslicciardi/nutriguide-backend:v2
           imagePullPolicy: Always
           ports:
             - name: http-backend
