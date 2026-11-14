@@ -163,6 +163,17 @@ Con **https**: el ingress del cluster redirige todo HTTP a HTTPS (308) y el
 certificado es un wildcard de Let's Encrypt (`*.my.kube.um.edu.ar`, vence
 23/01/2027), así que Android lo acepta sin configurar nada.
 
+**Límite de 1 MB por request en el borde de UM Cloud.** El proxy que está
+delante del ingress-nginx devuelve `413 Request Entity Too Large` con fotos
+de más de ~1 MB; directo al ingress-nginx (anotación `proxy-body-size: 20m`)
+pasan. No se puede cambiar desde el namespace. La app comprime a 1200 px y
+calidad 85 antes de subir (`ImageOptimizer.kt`, 120–250 KB), así que no
+afecta al celular; sí afecta a pruebas con `curl` y fotos originales.
+
+**Validado el 13/11/2026 desde la PC con ZeroTier:** las 6 imágenes de
+`demo_final/` por la URL pública, 6/6 veredictos correctos, 2,5–5,9 s de
+punta a punta (2,3–5,0 s de procesamiento en el pod).
+
 El celular tiene que tener **ZeroTier** conectado a la red de UM Cloud, o
 estar en la red de la universidad. Sin eso, ese host no resuelve.
 
