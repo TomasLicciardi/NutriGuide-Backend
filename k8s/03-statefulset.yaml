@@ -94,7 +94,7 @@ spec:
 
         # ─── Admin Panel (sidecar) ───
         - name: admin
-          image: docker.io/tomaslicciardi/nutriguide-admin:v2
+          image: docker.io/tomaslicciardi/nutriguide-admin:v3
           imagePullPolicy: Always
           ports:
             - name: http-admin
