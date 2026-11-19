@@ -41,4 +41,4 @@ class Product(Base):
 
     # Relaciones
     history = relationship("History", back_populates="products")
-    product_ingredients = relationship("ProductIngredient", back_populates="product")
+    product_ingredients = relationship("ProductIngredient", back_populates="product", cascade="all, delete-orphan")

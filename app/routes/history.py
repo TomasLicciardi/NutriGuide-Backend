@@ -146,7 +146,8 @@ async def eliminar_historial(token: str = Depends(JWTBearer()), db: Session = De
     if not historial:
         raise HTTPException(status_code=404, detail="Historial no encontrado")
 
-    db.query(Product).filter_by(history_id=historial.id).delete()
+    for producto in db.query(Product).filter_by(history_id=historial.id).all():
+        db.delete(producto)  # ORM delete: arrastra product_ingredients por cascade
     db.delete(historial)
     db.commit() 
 

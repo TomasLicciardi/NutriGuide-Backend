@@ -3,7 +3,8 @@
 Uso:
     python scripts/create_admin.py --email admin@nutriguide.local --password secret123 --username admin
 
-Si el usuario ya existe, lo promueve a is_admin=True sin tocar password.
+Si el usuario ya existe, lo promueve a is_admin=True sin tocar password
+(con --reset también le cambia la contraseña a la indicada).
 Si no existe, lo crea con esa contraseña.
 """
 
@@ -24,6 +25,7 @@ def main() -> int:
     parser.add_argument("--email", required=True, help="Email del usuario")
     parser.add_argument("--password", required=True, help="Password (solo si se crea)")
     parser.add_argument("--username", default="admin", help="Username (default: admin)")
+    parser.add_argument("--reset", action="store_true", help="Si el usuario existe, reemplazar su contraseña")
     args = parser.parse_args()
 
     init_database()
@@ -31,12 +33,14 @@ def main() -> int:
     try:
         existing = db.query(User).filter(User.email == args.email).first()
         if existing:
-            if existing.is_admin:
+            if args.reset:
+                existing.password = hash_password(args.password)
+            if existing.is_admin and not args.reset:
                 print(f"✓ {args.email} ya era admin (id={existing.id})")
             else:
                 existing.is_admin = True
                 db.commit()
-                print(f"✓ {args.email} promovido a admin (id={existing.id})")
+                print(f"✓ {args.email} {'contraseña cambiada, admin' if args.reset else 'promovido a admin'} (id={existing.id})")
             return 0
 
         new_user = User(
