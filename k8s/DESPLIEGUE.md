@@ -185,11 +185,11 @@ Para probar en casa sin Kubernetes: backend corriendo en la PC con
 ## Actualizar después de un cambio de código
 
 ```powershell
-docker build -t docker.io/tomaslicciardi/nutriguide-backend:v2 ./backend
-docker push docker.io/tomaslicciardi/nutriguide-backend:v2
+docker build -t docker.io/tomaslicciardi/nutriguide-backend:v3 ./backend
+docker push docker.io/tomaslicciardi/nutriguide-backend:v3
 ```
 
-En la VM, cambiar `v1` por `v2` en `03-statefulset.yaml` y
+En la VM, cambiar la etiqueta (hoy `v3`) en `03-statefulset.yaml` y
 `kubectl apply -f 03-statefulset.yaml`. El StatefulSet baja el pod viejo
 antes de subir el nuevo (un solo escritor sobre SQLite, siempre).
 
