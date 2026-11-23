@@ -18,6 +18,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import time
 import unicodedata
 from dataclasses import dataclass, field
@@ -53,6 +54,11 @@ from app.services.ingredient_facts import (
 from app.services.ingredient_explanations import explain_ingredient
 
 logger = logging.getLogger(__name__)
+
+# Duración mínima de un análisis resuelto desde la caché de lecturas. Sin
+# esto, una foto repetida responde en ~0,1 s y la app no alcanza a mostrar
+# el estado de "analizando": la respuesta parece un error. Configurable.
+OCR_CACHE_MIN_SECONDS = float(os.getenv("OCR_CACHE_MIN_SECONDS", "1.2"))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -255,7 +261,8 @@ class AnalysisPipeline:
         # Misma foto (mismos bytes) → misma transcripción, sin llamar a Gemini.
         image_sha = hashlib.sha256(image_data).hexdigest()
         ocr_result = self._ocr_cache_get(db, image_sha)
-        if ocr_result is not None:
+        from_cache = ocr_result is not None
+        if from_cache:
             logger.info(f"FASE 1: lectura en caché (sha256 {image_sha[:12]}), sin llamar a Gemini")
         else:
             logger.info("FASE 1: OCR con Gemini Vision")
@@ -294,7 +301,12 @@ class AnalysisPipeline:
             start_time=start_time,
         )
         result.ocr_result = ocr_result
-        result.stats.gemini_calls += 1  # +1 por el OCR (run_from_text ya contó el LLM batch)
+        if from_cache:
+            elapsed = time.time() - start_time
+            if elapsed < OCR_CACHE_MIN_SECONDS:
+                await asyncio.sleep(OCR_CACHE_MIN_SECONDS - elapsed)
+        else:
+            result.stats.gemini_calls += 1  # +1 por el OCR (run_from_text ya contó el LLM batch)
         return result
 
     async def run_from_text(
