@@ -15,15 +15,18 @@ con trazabilidad de fuente por tag.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
+from app.models.ocr_cache import OcrCache
 from app.services.gemini_service import gemini_service, OCRResult
 from app.services.translation_service import translation_service
 from app.services.parser import (
@@ -199,6 +202,42 @@ class PipelineResult:
 
 class AnalysisPipeline:
 
+    # ── Caché de lecturas (Fase 1) ──────────────────────────────────────
+    @staticmethod
+    def _ocr_cache_get(db: Session, image_sha: str) -> Optional[OCRResult]:
+        try:
+            row = db.get(OcrCache, image_sha)
+            if row is None:
+                return None
+            row.hits = (row.hits or 0) + 1
+            row.last_used_at = datetime.utcnow()
+            db.commit()
+            return OCRResult(
+                success=True,
+                ingredients=json.loads(row.ingredients_json),
+                classifications={},
+                allergen_warnings=row.allergen_warnings,
+                confidence=1.0,
+            )
+        except Exception as e:  # la caché nunca debe romper un análisis
+            logger.warning(f"ocr_cache: lectura falló ({e}); se llama a Gemini")
+            db.rollback()
+            return None
+
+    @staticmethod
+    def _ocr_cache_put(db: Session, image_sha: str, ocr: OCRResult) -> None:
+        try:
+            db.merge(OcrCache(
+                image_sha256=image_sha,
+                ingredients_json=json.dumps(ocr.ingredients, ensure_ascii=False),
+                allergen_warnings=ocr.allergen_warnings,
+                model=getattr(ocr, "model", None),
+            ))
+            db.commit()
+        except Exception as e:
+            logger.warning(f"ocr_cache: no se pudo guardar ({e})")
+            db.rollback()
+
     async def run(
         self,
         image_data: bytes,
@@ -212,9 +251,17 @@ class AnalysisPipeline:
         """
         start_time = time.time()
 
-        # ── FASE 1: OCR ──
-        logger.info("FASE 1: OCR con Gemini Vision")
-        ocr_result = await gemini_service.extract_and_classify(image_data, image_type)
+        # ── FASE 1: OCR (con caché por imagen) ──
+        # Misma foto (mismos bytes) → misma transcripción, sin llamar a Gemini.
+        image_sha = hashlib.sha256(image_data).hexdigest()
+        ocr_result = self._ocr_cache_get(db, image_sha)
+        if ocr_result is not None:
+            logger.info(f"FASE 1: lectura en caché (sha256 {image_sha[:12]}), sin llamar a Gemini")
+        else:
+            logger.info("FASE 1: OCR con Gemini Vision")
+            ocr_result = await gemini_service.extract_and_classify(image_data, image_type)
+            if ocr_result.success and ocr_result.ingredients:
+                self._ocr_cache_put(db, image_sha, ocr_result)
         if not ocr_result.success:
             # Mapeo de error_type → HTTP status:
             #   - poor_quality / invalid_image  → 400 (problema del input del usuario)

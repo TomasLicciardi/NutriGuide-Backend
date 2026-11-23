@@ -74,6 +74,11 @@ def verify_system_health():
 
         db = next(get_db())
         kb_count = knowledge_base_service.count(db)
+        try:
+            from app.models.ocr_cache import OcrCache
+            ocr_cache_entries = db.query(OcrCache).count()
+        except Exception:
+            ocr_cache_entries = None
         db.close()
 
         translation_cache = translation_service.get_cache_size()
@@ -81,6 +86,7 @@ def verify_system_health():
         health_status = {
             "knowledge_base_ingredients": kb_count,
             "translation_cache_size": translation_cache,
+            "ocr_cache_entries": ocr_cache_entries,
             "codex_ins_loaded": codex_ins_loader.is_initialized,
             "off_taxonomy_loaded": off_taxonomy_loader.is_initialized,
             "canonicalization_loaded": canonicalization_service._initialized,
