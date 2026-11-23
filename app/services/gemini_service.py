@@ -361,8 +361,7 @@ RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
                 r"```json\s*(\{.*?\})\s*```", response_text, re.DOTALL
             )
             # strict=False: Gemini a veces corta un string con un salto de
-            # línea literal ("almidón de
- maíz"); el parser estricto lo
+            # línea literal (almidón de <salto> maíz); el parser estricto lo
             # rechaza como "Invalid control character" y se pierde todo el OCR.
             if json_match:
                 data = json.loads(json_match.group(1), strict=False)
