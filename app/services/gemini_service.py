@@ -360,10 +360,14 @@ RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
             json_match = re.search(
                 r"```json\s*(\{.*?\})\s*```", response_text, re.DOTALL
             )
+            # strict=False: Gemini a veces corta un string con un salto de
+            # línea literal ("almidón de
+ maíz"); el parser estricto lo
+            # rechaza como "Invalid control character" y se pierde todo el OCR.
             if json_match:
-                data = json.loads(json_match.group(1))
+                data = json.loads(json_match.group(1), strict=False)
             else:
-                data = json.loads(response_text)
+                data = json.loads(response_text, strict=False)
 
             raw_ingredients = data.get("ingredientes", [])
             if not isinstance(raw_ingredients, list) or not raw_ingredients:
@@ -461,10 +465,16 @@ RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
         modelo_actual = modelos[idx_modelo]
         cliente = genai.GenerativeModel(modelo_actual)
 
-        def _next_model() -> bool:
-            """Avanza al siguiente modelo con cuota. False si no quedan."""
+        def _next_model(mark_exhausted: bool = True) -> bool:
+            """Avanza al siguiente modelo de la cadena. False si no quedan.
+
+            `mark_exhausted=False` para errores transitorios (503 "high demand",
+            5xx): se rota en esta llamada pero el modelo sigue disponible para
+            los próximos análisis.
+            """
             nonlocal idx_modelo, modelo_actual, cliente, attempt_general, attempt_429
-            _exhausted_models.add(modelo_actual)
+            if mark_exhausted:
+                _exhausted_models.add(modelo_actual)
             idx_modelo += 1
             if idx_modelo >= len(modelos):
                 return False
@@ -515,6 +525,11 @@ RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
                         f"{type(e).__name__}: {e}"
                     )
                     attempt_general += 1
+                    # 503 "high demand" y otros 5xx son del modelo, no de la
+                    # cuota: probar el siguiente de la cadena sin marcar este
+                    # como agotado (en el próximo análisis vuelve a ser el primero).
+                    if attempt_general >= len(timeouts) and _next_model(mark_exhausted=False):
+                        continue
                     continue
 
                 # ── Es 429: clasificar y decidir ──
