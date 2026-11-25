@@ -2299,6 +2299,26 @@
   is_nut_safe: true
   is_vegan_safe: false
 
+- name_es: lactoalbumina
+  name_en: lactalbumin
+  type: BASE
+  origin: animal
+  description_es: Proteína del suero de la leche
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: lactoglobulina
+  name_en: lactoglobulin
+  type: BASE
+  origin: animal
+  description_es: Proteína del suero de la leche
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
 # ── Carnes y embutidos comunes ──
 
 - name_es: jamon
