@@ -2227,6 +2227,78 @@
   is_nut_safe: true
   is_vegan_safe: true
 
+# ── Nombres técnicos frecuentes en productos artesanales (25/11/2026) ──
+
+- name_es: albumina
+  name_en: albumin
+  type: BASE
+  origin: animal
+  description_es: Proteína de la clara de huevo; se usa como espumante y texturizante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: albumina de huevo
+  name_en: egg albumin
+  type: BASE
+  origin: animal
+  description_es: Proteína de la clara de huevo; se usa como espumante y texturizante
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: colageno hidrolizado
+  name_en: hydrolyzed collagen
+  type: BASE
+  origin: animal
+  description_es: Proteína animal de huesos y piel, hidrolizada; común en productos proteicos
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: false
+
+- name_es: vinagre de malta
+  name_en: malt vinegar
+  type: BASE
+  origin: vegetal
+  description_es: Vinagre obtenido de malta de cebada; contiene gluten
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: pecan
+  name_en: pecan
+  type: BASE
+  origin: vegetal
+  description_es: Fruto seco (nuez pecán), alérgeno de declaración obligatoria
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: false
+  is_vegan_safe: true
+
+- name_es: nuez pecan
+  name_en: pecan nut
+  type: BASE
+  origin: vegetal
+  description_es: Fruto seco (nuez pecán), alérgeno de declaración obligatoria
+  is_tacc_safe: true
+  is_lactose_safe: true
+  is_nut_safe: false
+  is_vegan_safe: true
+
+- name_es: grana padano
+  name_en: grana padano cheese
+  type: BASE
+  origin: animal
+  description_es: Queso duro italiano de leche de vaca
+  is_tacc_safe: true
+  is_lactose_safe: false
+  is_nut_safe: true
+  is_vegan_safe: false
+
 # ── Carnes y embutidos comunes ──
 
 - name_es: jamon

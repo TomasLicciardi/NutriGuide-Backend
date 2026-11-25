@@ -185,8 +185,8 @@ Para probar en casa sin Kubernetes: backend corriendo en la PC con
 ## Actualizar después de un cambio de código
 
 ```powershell
-docker build -t docker.io/tomaslicciardi/nutriguide-backend:v9 ./backend
-docker push docker.io/tomaslicciardi/nutriguide-backend:v9
+docker build -t docker.io/tomaslicciardi/nutriguide-backend:v10 ./backend
+docker push docker.io/tomaslicciardi/nutriguide-backend:v10
 ```
 
 En la VM, cambiar la etiqueta (hoy `v3`) en `03-statefulset.yaml` y
