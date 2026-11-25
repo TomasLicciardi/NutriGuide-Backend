@@ -33,6 +33,13 @@ def _normalize(text: str) -> str:
 class KnowledgeBaseService:
     """Tier 2: búsqueda y almacenamiento en la base de ingredientes local."""
 
+    @staticmethod
+    def _is_low_confidence(ingredient: Ingredient) -> bool:
+        """Filas guardadas como placeholder (confianza < umbral de escritura)
+        no cuentan como conocimiento: se vuelve a consultar a las fuentes."""
+        conf = ingredient.confidence
+        return conf is not None and conf < KB_CONFIG["min_write_confidence"]
+
     def lookup(self, name_es: str, db: Session) -> Optional[IngredientResult]:
         """Busca un ingrediente por nombre normalizado en español."""
         norm = _normalize(name_es)
@@ -45,6 +52,8 @@ class KnowledgeBaseService:
             return None
 
         if not self._is_fully_classified(ingredient):
+            return None
+        if self._is_low_confidence(ingredient):
             return None
 
         result = IngredientResult(
@@ -84,6 +93,8 @@ class KnowledgeBaseService:
         found: Dict[str, IngredientResult] = {}
         for ingredient in ingredients:
             if not self._is_fully_classified(ingredient):
+                continue
+            if self._is_low_confidence(ingredient):
                 continue
 
             norm = _normalize(ingredient.name_es)

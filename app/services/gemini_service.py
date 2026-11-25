@@ -49,6 +49,10 @@ _MODEL_FALLBACKS = [
     ).split(",") if m.strip()
 ]
 # Modelos cuya cuota diaria ya se agotó en este proceso. Se limpia al reiniciar.
+# Lectura de etiqueta determinista: con temperatura 0 la misma foto produce
+# la misma transcripción (y el mismo veredicto) en cada análisis.
+_VISION_GENERATION_CONFIG = {"temperature": 0}
+
 _exhausted_models: set = set()
 
 
@@ -462,7 +466,7 @@ RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
         modelos = _available_models()
         idx_modelo = 0
         modelo_actual = modelos[idx_modelo]
-        cliente = genai.GenerativeModel(modelo_actual)
+        cliente = genai.GenerativeModel(modelo_actual, generation_config=_VISION_GENERATION_CONFIG)
 
         def _next_model(mark_exhausted: bool = True) -> bool:
             """Avanza al siguiente modelo de la cadena. False si no quedan.
@@ -478,7 +482,7 @@ RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
             if idx_modelo >= len(modelos):
                 return False
             modelo_actual = modelos[idx_modelo]
-            cliente = genai.GenerativeModel(modelo_actual)
+            cliente = genai.GenerativeModel(modelo_actual, generation_config=_VISION_GENERATION_CONFIG)
             attempt_general = 0
             attempt_429 = 0
             logger.warning(f"Gemini: rotando a modelo de respaldo '{modelo_actual}'")
@@ -513,8 +517,9 @@ RESPONDE ÚNICAMENTE EN JSON VÁLIDO (sin texto extra):
                 )
                 attempt_general += 1
                 # Un modelo que no responde a tiempo tampoco sirve: probamos el
-                # siguiente de la cadena antes de darnos por vencidos.
-                if attempt_general >= len(timeouts) and _next_model():
+                # siguiente de la cadena antes de darnos por vencidos. Sin
+                # marcarlo agotado: un timeout es transitorio, no es cuota.
+                if attempt_general >= len(timeouts) and _next_model(mark_exhausted=False):
                     continue
 
             except Exception as e:

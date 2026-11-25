@@ -17,6 +17,7 @@ usuario promedio NO reconocería como derivado de un alérgeno.
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from typing import TYPE_CHECKING
 
@@ -187,6 +188,31 @@ def _normalize(text: str) -> str:
     )
 
 
+def _compile_curated():
+    """Patrones del diccionario curado, la clave más larga primero.
+
+    Match al inicio de palabra: 'caseina' cubre 'caseinato de sodio' pero
+    'nata' ya no matchea 'natural' ni 'mani' a 'manitol'. Las claves cortas
+    (hasta 5 letras) exigen palabra completa (con plural); las largas admiten
+    sufijo. La más larga primero: 'manteca de cerdo' gana sobre 'manteca'.
+    """
+    compiled = []
+    for key, explanation in sorted(_CURATED_EXPLANATIONS.items(), key=lambda kv: -len(kv[0])):
+        tail = r"(?:s|es)?(?![a-z])" if len(key) <= 5 else ""
+        compiled.append((re.compile(r"(?<![a-z])" + re.escape(key) + tail), explanation))
+    return compiled
+
+
+_CURATED_PATTERNS = _compile_curated()
+
+
+def _curated_match(normalized: str):
+    for pattern, explanation in _CURATED_PATTERNS:
+        if pattern.search(normalized):
+            return explanation
+    return None
+
+
 def explain_ingredient(facts: "IngredientFacts") -> str:
     """
     Devuelve una explicación corta del ingrediente, optimizada para mostrar
@@ -198,11 +224,9 @@ def explain_ingredient(facts: "IngredientFacts") -> str:
       3. Texto genérico basado en el primer allergen canónico del ingrediente.
       4. Cadena vacía si no hay información (el caller decide qué hacer).
     """
-    normalized = _normalize(facts.name_es)
-
-    for key, explanation in _CURATED_EXPLANATIONS.items():
-        if key in normalized:
-            return explanation
+    curated = _curated_match(_normalize(facts.name_es))
+    if curated:
+        return curated
 
     if facts.description_es:
         return facts.description_es.strip()
@@ -230,5 +254,4 @@ def has_curated_explanation(name_es: str) -> bool:
     descripción que nunca se mostraría: `explain_ingredient` da prioridad al
     diccionario curado por sobre la description_es del KB.
     """
-    normalized = _normalize(name_es or "")
-    return any(key in normalized for key in _CURATED_EXPLANATIONS)
+    return _curated_match(_normalize(name_es or "")) is not None

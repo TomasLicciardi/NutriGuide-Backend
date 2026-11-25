@@ -9,6 +9,8 @@ base, se consulta Gemini con salida JSON estricta y se valida antes de usarlo.
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 import logging
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Set, Tuple
@@ -52,6 +54,7 @@ class LLMClassification:
     confidence: float
     reasoning: str
     raw_response: str
+    name: Optional[str] = None   # nombre que el modelo repite (lote): se empareja por acá
 
 
 _PROMPT_V1 = """Eres un experto en regulación alimentaria argentina (CAA Cap. XVIII).
@@ -112,8 +115,11 @@ INGREDIENTES_A_CLASIFICAR:
 
 Devolvé SOLO un array JSON (sin markdown, sin texto antes ni después) con
 EXACTAMENTE {count} elementos en el MISMO ORDEN que la lista de entrada.
+Cada elemento lleva "name" con el nombre EXACTO que te pasé (sin el número ni
+la parte "en:"): lo uso para emparejar tu respuesta con cada ingrediente.
 Cada elemento es un objeto con esta forma:
 {{
+  "name": "nombre exacto del ingrediente tal como te lo pasé",
   "category": "BASE | ADITIVO | FLAVORING | VITAMIN | MINERAL",
   "origin": "plant | animal | synthetic | mineral | natural_extract | unknown",
   "function_tag": "emulsionante | conservante | colorante | ... | null",
@@ -262,6 +268,9 @@ def _parse_response(raw: str) -> Optional[LLMClassification]:
     if not isinstance(reasoning, str):
         reasoning = ""
 
+    name = data.get("name")
+    name = name.strip() if isinstance(name, str) and name.strip() else None
+
     return LLMClassification(
         category=category,
         origin=origin,
@@ -273,6 +282,7 @@ def _parse_response(raw: str) -> Optional[LLMClassification]:
         confidence=confidence,
         reasoning=reasoning.strip(),
         raw_response=raw,
+        name=name,
     )
 
 
@@ -309,6 +319,55 @@ def _parse_array_response(raw: str, expected_count: int) -> List[Optional[LLMCla
         parsed = _parse_response(json.dumps(item))
         results.append(parsed)
     return results
+
+
+def _normalize_name(text: str) -> str:
+    """Nombre comparable: sin numeración, sin '(en: ...)', sin acentos."""
+    text = re.sub(r"^\s*\d+[.)]\s*", "", text or "")
+    text = re.sub(r"\(\s*en\s*:.*?\)", "", text, flags=re.IGNORECASE)
+    nfkd = unicodedata.normalize("NFKD", text.lower())
+    text = "".join(c for c in nfkd if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", " ", text).strip(" .,;:")
+
+
+def _align_by_name(
+    raw: str, items: Sequence[Tuple[str, Optional[str]]]
+) -> Optional[List[Optional[LLMClassification]]]:
+    """
+    Empareja cada objeto de la respuesta con su ingrediente por el campo
+    "name" que el prompt pide repetir. Así, si el modelo cambia el orden,
+    junta dos ítems o agrega uno, ningún ingrediente recibe la clasificación
+    de otro (y nada incorrecto llega a la base de conocimiento).
+
+    Devuelve None si la respuesta no trae nombres: el caller cae al
+    emparejamiento por posición de siempre.
+    """
+    try:
+        data = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, list) or not data:
+        return None
+    if not all(
+        isinstance(item, dict) and isinstance(item.get("name"), str) and item["name"].strip()
+        for item in data
+    ):
+        return None
+
+    by_name: dict = {}
+    for item in data:
+        by_name.setdefault(_normalize_name(item["name"]), _parse_response(json.dumps(item)))
+
+    aligned: List[Optional[LLMClassification]] = []
+    for name_es, name_en in items:
+        hit = by_name.get(_normalize_name(name_es))
+        if hit is None and name_en:
+            hit = by_name.get(_normalize_name(name_en))
+        aligned.append(hit)
+    matched = sum(1 for a in aligned if a is not None)
+    if matched < len(items):
+        logger.info(f"LLM batch: {matched}/{len(items)} emparejados por nombre")
+    return aligned
 
 
 class LLMFallbackService:
@@ -389,7 +448,11 @@ class LLMFallbackService:
 
         if not raw:
             return [None] * len(items)
-        return _parse_array_response(raw.strip(), expected_count=len(items))
+        raw = raw.strip()
+        aligned = _align_by_name(raw, items)
+        if aligned is not None:
+            return aligned
+        return _parse_array_response(raw, expected_count=len(items))
 
 
 llm_fallback_service = LLMFallbackService()

@@ -8,7 +8,9 @@ from app.core.config import settings
 DATABASE_URL = f"sqlite:///{settings.DATABASE_PATH}/{settings.DATABASE_NAME}"
 
 # Crear el motor SQLAlchemy
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+# timeout: el panel de administración escribe el mismo archivo desde otro
+# proceso; 15 s de espera por el lock evita un "database is locked" espurio.
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False, "timeout": 15})
 
 # Crear la sesión de base de datos
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -365,3 +365,36 @@ def test_enrich_one_no_llama_al_llm_directamente(monkeypatch):
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Emparejamiento por nombre (classify_batch)
+# ════════════════════════════════════════════════════════════════════════════
+
+from app.services.llm_fallback_service import _align_by_name
+
+
+def test_align_by_name_respeta_el_nombre_aunque_cambie_el_orden():
+    raw = _array(
+        {**_payload_obj(category="ADITIVO", origin="plant"), "name": "goma guar"},
+        {**_payload_obj(category="BASE", origin="animal"), "name": "Lactosuero"},
+    )
+    aligned = _align_by_name(raw, [("lactosuero", "whey"), ("goma guar", "guar gum")])
+    assert aligned[0] is not None and aligned[0].origin == Origin.ANIMAL
+    assert aligned[1] is not None and aligned[1].origin == Origin.PLANT
+
+
+def test_align_by_name_ignora_numeracion_y_traduccion():
+    raw = _array({**_payload_obj(category="ADITIVO", origin="synthetic"), "name": "2. Ácido cítrico (en: citric acid)"})
+    aligned = _align_by_name(raw, [("acido citrico", "citric acid")])
+    assert aligned[0] is not None and aligned[0].origin == Origin.SYNTHETIC
+
+
+def test_align_by_name_sin_nombres_devuelve_none():
+    raw = _array(_payload_obj(category="BASE"), _payload_obj(category="BASE"))
+    assert _align_by_name(raw, [("a", None), ("b", None)]) is None
+
+
+def test_align_by_name_un_nombre_desconocido_queda_sin_clasificar():
+    raw = _array({**_payload_obj(category="BASE", origin="plant"), "name": "otra cosa"})
+    assert _align_by_name(raw, [("lactosuero", "whey")]) == [None]

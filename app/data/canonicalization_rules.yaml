@@ -7,6 +7,27 @@
 # compactados.
 
 aliases:
+  # CAA Art. 661: "harina" sin otro calificativo designa harina de trigo.
+  harina:
+    canonical: harina de trigo
+    name_en: wheat flour
+    reason: CAA Art. 661, harina sin calificativo es de trigo
+  harina 000:
+    canonical: harina de trigo
+    name_en: wheat flour
+    reason: CAA Art. 661, harina sin calificativo es de trigo
+  harina 0000:
+    canonical: harina de trigo
+    name_en: wheat flour
+    reason: CAA Art. 661, harina sin calificativo es de trigo
+  harina leudante:
+    canonical: harina de trigo
+    name_en: wheat flour
+    reason: CAA Art. 661, harina leudante es harina de trigo con leudantes
+  harina integral:
+    canonical: harina de trigo integral
+    name_en: whole wheat flour
+    reason: CAA Art. 661, harina integral sin calificativo es de trigo
   cloruro de sodio:
     canonical: sal
     name_en: salt
