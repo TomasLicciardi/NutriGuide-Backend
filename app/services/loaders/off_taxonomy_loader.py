@@ -25,6 +25,7 @@ import asyncio
 import logging
 import re
 import sqlite3
+import threading
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -138,6 +139,12 @@ class OffTaxonomyLoader:
         self._conn: Optional[sqlite3.Connection] = None
         self._initialized: bool = False
         self._entry_count: int = 0
+        # `lookup()` corre `_lookup_sync` en un thread por ingrediente
+        # (asyncio.to_thread) y todos comparten esta conexión. sqlite3 cachea
+        # statements por conexión: dos threads a la vez reutilizan el mismo
+        # statement y se mezclan los resultados (un ingrediente recibía los
+        # tags de otro). El lookup tarda microsegundos: se serializa con lock.
+        self._lock = threading.Lock()
 
     @property
     def is_initialized(self) -> bool:
@@ -197,7 +204,10 @@ class OffTaxonomyLoader:
         norm = _normalize_lookup(name)
         if not norm:
             return None
+        with self._lock:
+            return self._lookup_locked(norm, name)
 
+    def _lookup_locked(self, norm: str, name: str) -> Optional[OffTaxonomyEntry]:
         # Estrategia: probar idiomas en orden de probabilidad para etiquetas
         # argentinas (ES > EN > FR/PT/IT). El primero que matchea gana.
         # Si no hay hit exacto, probamos variantes morfológicas (singular/plural)
