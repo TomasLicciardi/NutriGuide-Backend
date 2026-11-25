@@ -2,6 +2,7 @@
 import os
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
 # Construir la URL de conexión
@@ -10,7 +11,16 @@ DATABASE_URL = f"sqlite:///{settings.DATABASE_PATH}/{settings.DATABASE_NAME}"
 # Crear el motor SQLAlchemy
 # timeout: el panel de administración escribe el mismo archivo desde otro
 # proceso; 15 s de espera por el lock evita un "database is locked" espurio.
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False, "timeout": 15})
+# NullPool: una conexión por sesión, sin pool. Con el QueuePool por defecto
+# (5 + 10 conexiones) más de 15 análisis simultáneos agotan el pool y la
+# espera por una conexión bloquea el event loop: ninguna sesión puede
+# cerrarse y el servidor queda colgado. Abrir una conexión SQLite cuesta
+# milisegundos, así que no hay nada que ganar con el pool.
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False, "timeout": 15},
+    poolclass=NullPool,
+)
 
 # Crear la sesión de base de datos
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
