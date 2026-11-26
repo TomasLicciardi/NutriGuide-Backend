@@ -73,7 +73,7 @@ def _is_unverifiable_base(f: IngredientFacts) -> bool:
 def _block_unverifiable(label: str, f: IngredientFacts) -> PredicateResult:
     return PredicateResult(
         apto=False,
-        motivo="sin información confiable, por precaución no apto",
+        motivo="no identificado; por precaución, no apto",
         confidence=0.5,
     )
 

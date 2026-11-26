@@ -58,7 +58,9 @@ logger = logging.getLogger(__name__)
 # Duración mínima de un análisis resuelto desde la caché de lecturas. Sin
 # esto, una foto repetida responde en ~0,1 s y la app no alcanza a mostrar
 # el estado de "analizando": la respuesta parece un error. Configurable.
-OCR_CACHE_MIN_SECONDS = float(os.getenv("OCR_CACHE_MIN_SECONDS", "1.2"))
+# Una lectura desde caché tarda milisegundos; se estira a un tiempo parecido
+# al de un análisis real para que la experiencia sea la misma.
+OCR_CACHE_MIN_SECONDS = float(os.getenv("OCR_CACHE_MIN_SECONDS", "2.5"))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
