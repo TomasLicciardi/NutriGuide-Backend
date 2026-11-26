@@ -61,6 +61,10 @@ def _is_unverifiable_base(f: IngredientFacts) -> bool:
     """
     if f.is_flavoring():
         return False
+    if getattr(f, "is_group", False):
+        # 'mezcla energética (avena, miel)': lo que importa son los
+        # componentes, que se evalúan aparte.
+        return False
     if f.category not in (IngredientCategory.BASE, IngredientCategory.UNKNOWN):
         return False
     return f.origin == Origin.UNKNOWN
@@ -69,10 +73,7 @@ def _is_unverifiable_base(f: IngredientFacts) -> bool:
 def _block_unverifiable(label: str, f: IngredientFacts) -> PredicateResult:
     return PredicateResult(
         apto=False,
-        motivo=(
-            f"ingrediente base no verificable — sin fuentes para "
-            f"determinar si cumple '{label}'"
-        ),
+        motivo="sin información confiable, por precaución no apto",
         confidence=0.5,
     )
 

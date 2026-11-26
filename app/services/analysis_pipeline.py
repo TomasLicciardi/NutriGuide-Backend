@@ -137,6 +137,21 @@ def _strip_accents(text: str) -> str:
 # ingrediente de la lista. No descartamos la declaración (puede ser contaminación
 # cruzada legítima por línea compartida) pero bajamos la confianza del veredicto
 # y exponemos un warning auditable.
+def _flatten_sub_ingredients(parsed: List[ParsedIngredient]) -> List[ParsedIngredient]:
+    """'chocolate (azúcar, leche en polvo)' → chocolate, azúcar, leche en polvo.
+
+    Los sub-ingredientes entre paréntesis son ingredientes reales y se
+    evalúan como cualquier otro (la leche en polvo adentro del chocolate
+    bloquea sin lactosa). El padre se conserva, marcado como grupo.
+    """
+    out: List[ParsedIngredient] = []
+    for p in parsed:
+        out.append(p)
+        if p.sub_ingredients:
+            out.extend(_flatten_sub_ingredients(p.sub_ingredients))
+    return out
+
+
 _CONF_LEGAL_CONTAINS_SUPPORTED = 0.99
 _CONF_LEGAL_CONTAINS_UNSUPPORTED = 0.70
 
@@ -338,7 +353,9 @@ class AnalysisPipeline:
 
         # ── FASE 2: Parser estructural ──
         logger.info("FASE 2: Parser estructural argentino")
-        parsed_list: List[ParsedIngredient] = parse_ingredient_list(ingredients_text)
+        parsed_list: List[ParsedIngredient] = _flatten_sub_ingredients(
+            parse_ingredient_list(ingredients_text)
+        )
         declaration = parse_allergen_declaration(allergen_text or "")
         logger.info(
             f"Parser: {len(parsed_list)} ingredientes, "
@@ -389,6 +406,9 @@ class AnalysisPipeline:
             gemini_classifications=gemini_classifications,
             translation_pairs=translation_pairs,
         )
+        for parsed_item, facts in zip(parsed_list, ingredient_facts):
+            if parsed_item.sub_ingredients:
+                facts.is_group = True
 
         # ── FASE 4.4: PubChem fallback (compuestos químicos no resueltos) ──
         # Corre antes del LLM: cada compuesto que PubChem identifica es una
@@ -439,21 +459,6 @@ class AnalysisPipeline:
             verdict.trigger_ingredients = self._find_trigger_ingredients(
                 restriction, ingredient_facts
             )
-            # Caso "PUEDE CONTENER" sin ingrediente que lo respalde: la receta
-            # está limpia y el bloqueo viene solo de la advertencia de
-            # contaminación cruzada del fabricante. Decirlo explícitamente es
-            # más útil que mostrar la declaración sola: le informa al usuario
-            # que el análisis de la lista SÍ se hizo y salió sin hallazgos.
-            if (
-                not verdict.trigger_ingredients
-                and verdict.fuente == "legal_declaration"
-                and verdict.motivo
-                and "PUEDE CONTENER" in verdict.motivo
-            ):
-                verdict.motivo = (
-                    f"{verdict.motivo} — el fabricante advierte trazas por "
-                    f"contaminación cruzada. No está en la receta."
-                )
 
         # ── FASE 6: Veredicto + confianza ──
         user_verdict = all(v.apto for v in legal_verdicts.values())
@@ -524,7 +529,7 @@ class AnalysisPipeline:
             )
             return RestrictionVerdict(
                 apto=False,
-                motivo=f"Declaración legal CONTIENE: {allergens_es(matched)}{note}",
+                motivo=f"Contiene {allergens_es(matched)}",
                 fuente="legal_declaration",
                 confidence=confidence,
             )
@@ -532,7 +537,7 @@ class AnalysisPipeline:
             matched = declaration.matched_allergens(allergen_set)
             return RestrictionVerdict(
                 apto=False,
-                motivo=f"Declaración legal PUEDE CONTENER: {allergens_es(matched)}",
+                motivo=f"Puede contener {allergens_es(matched)} (trazas)",
                 fuente="legal_declaration",
                 confidence=0.95,
             )

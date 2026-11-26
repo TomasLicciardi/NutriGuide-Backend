@@ -239,6 +239,11 @@ class IngredientFacts:
     # ── Información descriptiva (no afecta predicados) ──
     description_es: Optional[str] = None
 
+    # Ingrediente compuesto con sub-ingredientes listados entre paréntesis
+    # ('chocolate (azúcar, leche en polvo)'). Sus componentes se evalúan por
+    # separado; el grupo en sí no bloquea aunque no se resuelva.
+    is_group: bool = False
+
     # ── Trazabilidad ──
     tag_provenance: Dict[str, List[TagProvenance]] = field(default_factory=dict)
     sources: List[str] = field(default_factory=list)
