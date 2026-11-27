@@ -154,6 +154,13 @@ def _flatten_sub_ingredients(parsed: List[ParsedIngredient]) -> List[ParsedIngre
     return out
 
 
+# Fuentes botánicas/animales que los predicados aceptan vía derived_from
+# (ver restriction_predicates: sin TACC y sin lactosa).
+_RESTRICTION_DERIVED_SETS = {
+    "sin_tacc": {"wheat", "barley", "rye", "oats"},
+    "sin_lactosa": {"milk", "dairy"},
+}
+
 _CONF_LEGAL_CONTAINS_SUPPORTED = 0.99
 _CONF_LEGAL_CONTAINS_UNSUPPORTED = 0.70
 
@@ -627,6 +634,10 @@ class AnalysisPipeline:
         allergen_set = _RESTRICTION_ALLERGEN_SETS.get(restriction)
         if not allergen_set:
             return []
+        # Los predicados de sin TACC y sin lactosa también bloquean por
+        # derived_from ('harina de avena' deriva de avena aunque no tenga
+        # tag de alérgeno): el ingrediente tiene que figurar como disparador.
+        derived_set = _RESTRICTION_DERIVED_SETS.get(restriction, set())
 
         seen_names: Set[str] = set()
         triggers: List[TriggerIngredient] = []
@@ -637,6 +648,8 @@ class AnalysisPipeline:
 
             if not matched and restriction == "vegano" and facts.origin == Origin.ANIMAL:
                 allergen_label = "origen animal"
+            elif not matched and derived_set and (facts.derived_from & derived_set):
+                allergen_label = "derivado de " + allergens_es(facts.derived_from & derived_set)
             elif not matched:
                 continue
 

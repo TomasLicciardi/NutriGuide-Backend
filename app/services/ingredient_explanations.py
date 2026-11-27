@@ -158,7 +158,7 @@ _GENERIC_BY_ALLERGEN: dict[str, str] = {
     "wheat": "derivado de trigo (contiene gluten)",
     "barley": "derivado de cebada (contiene gluten)",
     "rye": "derivado de centeno (contiene gluten)",
-    "oats": "derivado de avena (puede contener gluten)",
+    "oats": "derivado de avena (es TACC según el Código Alimentario Argentino)",
     "milk": "derivado lácteo",
     "lactose": "contiene lactosa",
     "dairy": "derivado lácteo",
@@ -234,6 +234,12 @@ def explain_ingredient(facts: "IngredientFacts") -> str:
     for allergen in sorted(facts.allergens):
         if allergen in _GENERIC_BY_ALLERGEN:
             return _GENERIC_BY_ALLERGEN[allergen]
+
+    # Sin tag de alérgeno pero con origen botánico conocido ('harina de
+    # avena' deriva de avena): la misma frase genérica.
+    for source in sorted(getattr(facts, "derived_from", ())):
+        if source in _GENERIC_BY_ALLERGEN:
+            return _GENERIC_BY_ALLERGEN[source]
 
     # Último fallback: triggers de vegano que solo tienen origin=animal
     # (sin allergen tag), ej. "grasa bovina".
