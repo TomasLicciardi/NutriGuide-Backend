@@ -11,6 +11,20 @@ from app.resources.history import get_history_by_user_id, create_history_for_use
 import json
 from io import BytesIO
 
+
+def _reducir_imagen(data: bytes, image_type: str, max_side: int = 1000):
+    try:
+        from PIL import Image
+        img = Image.open(BytesIO(data))
+        if max(img.size) <= max_side and len(data) < 400_000:
+            return data, image_type
+        img.thumbnail((max_side, max_side))
+        out = BytesIO()
+        img.convert("RGB").save(out, format="JPEG", quality=80, optimize=True)
+        return out.getvalue(), "image/jpeg"
+    except Exception:
+        return data, image_type
+
 router = APIRouter(
     prefix="/history",
     tags=["History"],
@@ -35,9 +49,15 @@ def obtener_historial(token: str = Depends(JWTBearer()), db: Session = Depends(g
         # Retornar lista vacía en lugar de error 404
         return []
         
-    productos = db.query(Product).filter_by(history_id=historial.id).order_by(desc(Product.date)).all()
-    
-    # Devolver solo información básica para la lista
+    # Solo las columnas que se muestran: cargar la fila entera traía la foto
+    # (cientos de KB por producto) para cada ítem del historial, y la lista
+    # tardaba segundos en abrir.
+    productos = (
+        db.query(Product.id, Product.date, Product.is_suitable)
+        .filter(Product.history_id == historial.id)
+        .order_by(desc(Product.date))
+        .all()
+    )
     return [{
         "id": p.id,
         "date": p.date,
@@ -93,10 +113,10 @@ async def obtener_imagen_producto(
     if not producto or not producto.image:
         raise HTTPException(status_code=404, detail="Imagen no encontrada")
 
-    return StreamingResponse(
-        BytesIO(producto.image),
-        media_type=producto.image_type
-    )
+    # La pantalla de detalle muestra la foto chica: se manda reducida (JPEG,
+    # lado mayor 1000 px) en vez del archivo original de varios MB.
+    data, media_type = _reducir_imagen(producto.image, producto.image_type)
+    return StreamingResponse(BytesIO(data), media_type=media_type)
 
 # Eliminar un producto específico del historial
 @router.delete("/product/{id}", response_model=DeleteResponse)
