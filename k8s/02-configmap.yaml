@@ -7,7 +7,7 @@ data:
   # Backend
   DATABASE_PATH: "/app/db"   # el volumen; /app/data lo trae la imagen (OFF taxonomy)
   DATABASE_NAME: "nutriguide.db"
-  JWT_ACCESS_TOKEN_EXPIRES: "3600"
+  JWT_ACCESS_TOKEN_EXPIRES: "2592000"   # 30 días: una sesión iniciada antes de la defensa no vence en el medio
   GEMINI_VISION_MODEL: "gemini-3.5-flash-lite"
   GEMINI_MODEL_FALLBACKS: "gemini-2.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash"
   GEMINI_RPM_LIMIT: "12"
