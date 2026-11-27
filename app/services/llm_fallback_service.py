@@ -137,6 +137,10 @@ Reglas:
 - "derived_from" lista las fuentes biológicas (wheat/milk/etc.) — usar SOLO los tags listados arriba.
 - Si es un químico de síntesis sin origen biológico → origin=synthetic, derived_from=[].
 - Si es un aromatizante/saborizante → category=FLAVORING; los predicados aplican política CAA aparte.
+- Si un ingrediente trae una línea YA_VERIFICADO, esos datos vienen de una fuente
+  confiable y son correctos: no los contradigas. Usalos para escribir
+  "description_es" en lenguaje simple, diciendo qué es y de dónde viene
+  (por ejemplo "proteína de la leche, da cremosidad").
 
 EJEMPLOS de salidas válidas (referencia para items individuales):
 
@@ -330,8 +334,19 @@ def _normalize_name(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip(" .,;:")
 
 
+def _format_item(i: int, item: Sequence) -> str:
+    """'3. lactosuero (en: whey)' y, si una fuente ya lo verificó, una
+    segunda línea con lo verificado (tercer elemento opcional de la tupla)."""
+    name_es, name_en = item[0], item[1]
+    line = f"{i+1}. {name_es} (en: {name_en or 'null'})"
+    hint = item[2] if len(item) > 2 else None
+    if hint:
+        line += f"\n   YA_VERIFICADO: {hint}"
+    return line
+
+
 def _align_by_name(
-    raw: str, items: Sequence[Tuple[str, Optional[str]]]
+    raw: str, items: Sequence[Sequence]
 ) -> Optional[List[Optional[LLMClassification]]]:
     """
     Empareja cada objeto de la respuesta con su ingrediente por el campo
@@ -359,7 +374,8 @@ def _align_by_name(
         by_name.setdefault(_normalize_name(item["name"]), _parse_response(json.dumps(item)))
 
     aligned: List[Optional[LLMClassification]] = []
-    for name_es, name_en in items:
+    for item in items:
+        name_es, name_en = item[0], item[1]
         hit = by_name.get(_normalize_name(name_es))
         if hit is None and name_en:
             hit = by_name.get(_normalize_name(name_en))
@@ -405,13 +421,15 @@ class LLMFallbackService:
 
     async def classify_batch(
         self,
-        items: Sequence[Tuple[str, Optional[str]]],
+        items: Sequence[Sequence],
         context: str,
     ) -> List[Optional[LLMClassification]]:
         """
         Clasifica todos los ingredientes de UNA imagen en una sola llamada
-        Gemini. Recibe pares (name_es, name_en) y devuelve una lista del mismo
-        largo, en el mismo orden, con None en los que no pudieron resolverse.
+        Gemini. Recibe tuplas (name_es, name_en[, verificado]) y devuelve una
+        lista del mismo largo, en el mismo orden, con None en los que no
+        pudieron resolverse. El tercer elemento, opcional, es el resumen de lo
+        que las fuentes ya verificaron: va al prompt como YA_VERIFICADO.
 
         Esto es lo que el pipeline usa en producción: por cada foto que el
         usuario toma, los N ingredientes que cayeron a tier 5 se mandan
@@ -422,8 +440,7 @@ class LLMFallbackService:
             return []
 
         ingredients_block = "\n".join(
-            f"{i+1}. {name_es} (en: {name_en or 'null'})"
-            for i, (name_es, name_en) in enumerate(items)
+            _format_item(i, item) for i, item in enumerate(items)
         )
         prompt = _PROMPT_BATCH_V1.format(
             context=context or "null",

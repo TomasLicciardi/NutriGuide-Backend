@@ -38,6 +38,7 @@ from app.services.ingredient_facts import (
     NUT_SOURCES,
     Origin,
     TagProvenance,
+    allergens_es,
 )
 from app.services.canonicalization_service import canonicalization_service
 from app.services.contextual_overrides import (
@@ -55,6 +56,24 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════════════════
 # Confianzas por fuente (jerarquía de autoridad)
 # ═══════════════════════════════════════════════════════════════════════════
+
+# Nombres legibles para el resumen "verificado por ..." que viaja al LLM.
+_SOURCE_ES = {
+    "codex_ins": "Codex INS",
+    "off_taxonomy": "Open Food Facts",
+    "kb_cache": "base de conocimiento",
+    "pubchem": "PubChem",
+    "legal_declaration": "declaración de la etiqueta",
+    "contextual_override": "regla contextual",
+    "policy_caa": "política CAA",
+}
+_ORIGIN_ES = {
+    "plant": "vegetal",
+    "animal": "animal",
+    "synthetic": "sintético",
+    "mineral": "mineral",
+    "natural_extract": "extracto natural",
+}
 
 _CONFIDENCE_BY_SOURCE = {
     "codex_ins":           0.94,
@@ -356,8 +375,16 @@ class EnrichmentService:
         if not all_indices:
             return 0
 
-        items: List[Tuple[str, Optional[str]]] = [
-            (facts_list[i].name_es, facts_list[i].name_en) for i in all_indices
+        # Los que ya resolvió una fuente viajan con lo verificado (alérgenos,
+        # de qué deriva, origen y quién lo dijo): Gemini redacta la
+        # descripción a partir de eso y no reinventa la clasificación.
+        items: List[Tuple[str, Optional[str], Optional[str]]] = [
+            (
+                facts_list[i].name_es,
+                facts_list[i].name_en,
+                None if i in classify_set else self._verified_hint(facts_list[i]),
+            )
+            for i in all_indices
         ]
         # Contexto = todos los ingredientes parseados, separados por coma.
         context_str = ", ".join(p.name for p in parsed_list if p.name)
@@ -390,6 +417,23 @@ class EnrichmentService:
     # ═══════════════════════════════════════════════════════════════════════
     # Aplicación de fuentes individuales
     # ═══════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _verified_hint(facts: IngredientFacts) -> Optional[str]:
+        """Resumen en español de lo que las fuentes ya verificaron del
+        ingrediente, para que el LLM escriba la descripción acorde."""
+        parts: List[str] = []
+        if facts.allergens:
+            parts.append(f"alérgenos: {allergens_es(facts.allergens)}")
+        if facts.derived_from:
+            parts.append(f"deriva de: {allergens_es(facts.derived_from)}")
+        if facts.origin != Origin.UNKNOWN:
+            parts.append(f"origen: {_ORIGIN_ES.get(facts.origin.value, facts.origin.value)}")
+        if not parts:
+            return None
+        sources = [_SOURCE_ES[s] for s in facts.sources if s in _SOURCE_ES]
+        who = ", ".join(sources) if sources else "fuentes del sistema"
+        return f"verificado por {who}: " + "; ".join(parts)
 
     @staticmethod
     def _is_unresolved_base(facts: IngredientFacts) -> bool:

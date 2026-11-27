@@ -3673,3 +3673,43 @@
   is_lactose_safe: true
   is_nut_safe: true
   is_vegan_safe: true
+
+- name_es: harina de centeno
+  name_en: rye flour
+  type: BASE
+  origin: vegetal
+  description_es: Harina de centeno; el centeno es TACC (contiene gluten)
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: centeno
+  name_en: rye
+  type: BASE
+  origin: vegetal
+  description_es: Cereal con gluten; es TACC
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: harina de kamut
+  name_en: khorasan wheat flour
+  type: BASE
+  origin: vegetal
+  description_es: Harina de kamut, un trigo antiguo; contiene gluten
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
+
+- name_es: harina de malta
+  name_en: malt flour
+  type: BASE
+  origin: vegetal
+  description_es: Harina de cebada malteada; contiene gluten
+  is_tacc_safe: false
+  is_lactose_safe: true
+  is_nut_safe: true
+  is_vegan_safe: true
